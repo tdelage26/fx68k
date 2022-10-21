@@ -46,7 +46,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Clocks, phases and resets
 typedef struct {
-	logic pwrUp;			// Asserted together with reset on emulated system coldstart
 	logic enPhi1, enPhi2;	// Clock enables. Next cycle is PHI1 or PHI2
 } s_clks;
 
@@ -164,12 +163,13 @@ module fx68k(
 	s_clks Clks;
 
 	// extReset: External sync reset on emulated system
+	// pwrUp:	 Asserted together with reset on emulated system coldstart
 
-	wire Clks_clk, Clks_extReset;
+	wire Clks_clk, Clks_extReset, Clks_pwrUp;
 	
 	assign Clks_clk = clk;	
 	assign Clks_extReset = extReset;
-	assign Clks.pwrUp = pwrUp;	
+	assign Clks_pwrUp = pwrUp;	
 	assign Clks.enPhi1 = enPhi1;
 	assign Clks.enPhi2 = enPhi2;
 	
@@ -185,7 +185,7 @@ module fx68k(
 	// T4 continues ticking during reset and group0 exception.
 	// We also need it to erase ucode output latched on T4.
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp)
+		if( Clks_pwrUp)
 			tState <= T0;
 		else begin
 		case( tState)
@@ -214,7 +214,7 @@ module fx68k(
 	wire BeDebounced = ~( BeI | BeiDelay);
 
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp) begin
+		if( Clks_pwrUp) begin
 			rBerr <= 1'b0;
 			BeI <= 1'b0;
 		end
@@ -264,7 +264,7 @@ module fx68k(
 		// Seems we can latch whole address at either T1 or T2
 
 		// Originally it's invalid on hardware reset, and forced later when coming out of reset
-		if( Clks.pwrUp) begin
+		if( Clks_pwrUp) begin
 			microAddr <= RSTP0_NMA;
 			nanoAddr <= RSTP0_NMA;
 		end
@@ -359,7 +359,7 @@ module fx68k(
 		.nma, .a1, .a2, .a3, .tvn,
 		.psw, .prenEmpty, .au05z, .dcr4, .ze, .alue01( alue[1:0]), .i11( Irc[ 11]) );
 
-	excUnit excUnit( .Clks, .Clks_clk, .Clks_extReset, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
+	excUnit excUnit( .Clks, .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
@@ -368,7 +368,7 @@ module fx68k(
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod);
 	
-	busControl busControl( .Clks, .Clks_clk, .Clks_extReset, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
+	busControl busControl( .Clks, .Clks_clk, .Clks_extReset, .Clks_pwrUp, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
 		.bciWrite, .addrOe, .bgBlock, .waitBusCycle, .busStarting, .busAddrErr,
 		.rDtack, .BeDebounced, .Vpai,
@@ -385,7 +385,7 @@ module fx68k(
 	
 	// FC without permStart is special, either reset or halt
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp) begin
+		if( Clks_pwrUp) begin
 			oReset <= 1'b0;
 			oHalted <= 1'b0;
 		end
@@ -482,7 +482,7 @@ module fx68k(
 `endif
 	
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp) begin
+		if( Clks_pwrUp) begin
 			E <= 1'b0;
 			eCntr <='0;
 			rVma <= 1'b1;
@@ -563,7 +563,7 @@ module fx68k(
 	// PSW
 	logic irdToCcr_t4;
 	always_ff @( posedge Clks_clk) begin				
-		if( Clks.pwrUp) begin
+		if( Clks_pwrUp) begin
 			Tpend <= 1'b0;
 			{pswT, pswS, pswI } <= '0;
 			irdToCcr_t4 <= '0;
@@ -619,7 +619,7 @@ module fx68k(
 			inExcept01 <= (tvn != 1);
 		end
 			
-		if( Clks.pwrUp)
+		if( Clks_pwrUp)
 			ftu <= '0;
 		else if( enT3) begin
 			unique case( 1'b1)
@@ -1150,7 +1150,8 @@ endmodule
 
 */
 
-module excUnit( input s_clks Clks, input Clks_clk, input Clks_extReset,
+module excUnit( input s_clks Clks, input Clks_clk, input Clks_extReset, 
+	input Clks_pwrUp,
 	input enT1, enT2, enT3, enT4,
 	input s_nanod Nanod, input s_irdecod Irdecod,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
@@ -1508,7 +1509,7 @@ localparam REG_DT = 17;
 // synthesis translate_on
 
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp)
+		if( Clks_pwrUp)
 			auReg <= '0;
 		else if( enT3 & Nanod.auClkEn)
 			`ifdef SIMULBUGX32
@@ -1642,7 +1643,7 @@ localparam REG_DT = 17;
 	onehotEncoder4 dcrDecoder( .bin( dcrInput), .bitMap( dcrCode));
 	
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp)
+		if( Clks_pwrUp)
 			dcr4 <= '0;
 		else if( enT3 & Nanod.abd2Dcr) begin
 			dcrOutput <= dcrCode;
@@ -1684,7 +1685,7 @@ localparam REG_DT = 17;
 			.Irc, .dbin, .oEdb);
 
 	fx68kAlu alu(
-		.clk( Clks_clk), .pwrUp( Clks.pwrUp), .enT1, .enT3, .enT4,
+		.clk( Clks_clk), .pwrUp( Clks_pwrUp), .enT1, .enT3, .enT4,
 		.ird( Ird),
 		.aluColumn( Nanod.aluColumn), .aluAddrCtrl( Nanod.aluActrl),
 		.init( Nanod.aluInit), .finish( Nanod.aluFinish), .aluIsByte( Irdecod.isByte),
@@ -2266,7 +2267,7 @@ module busArbiter( input s_clks Clks, input Clks_clk, input Clks_extReset,
 			
 endmodule
 
-module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset, 
+module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset, input Clks_pwrUp,
 		input enT1, input enT4,
 		input permStart, permStop, iStop,
 		input aob0,
@@ -2439,7 +2440,7 @@ module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset,
 	
 	// Bus Cycle Info Latch
 	always_ff @( posedge Clks_clk) begin
-		if( Clks.pwrUp) begin
+		if( Clks_pwrUp) begin
 			bcPend <= 1'b0;
 			wendReg <= 1'b0;	
 			isWriteReg <= 1'b0;
