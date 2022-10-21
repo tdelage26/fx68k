@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic toCcr;
 	logic rxIsDt, ryIsDt;
 	logic rxIsUsp, rxIsMovem, movemPreDecr;
 	logic isByte;
@@ -164,7 +163,7 @@ module fx68k(
 	
 	wire wClk;
 	
-	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp;
+	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp, Irdecod_toCcr;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -358,7 +357,7 @@ module fx68k(
 
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
-	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp);
+	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -562,7 +561,7 @@ module fx68k(
 		end
 		
 		else if( enT4) begin
-			irdToCcr_t4 <= Irdecod.toCcr;
+			irdToCcr_t4 <= Irdecod_toCcr;
 		end
 		
 		else if( enT3) begin
@@ -936,6 +935,7 @@ module irdDecode( input [15:0] ird,
 			output Irdecod_isPcRel,
 			output Irdecod_isTas,
 			output Irdecod_implicitSp,
+			output Irdecod_toCcr,
 			output s_irdecod Irdecod);
 
 	wire [3:0] line = ird[15:12];
@@ -1080,7 +1080,7 @@ module irdDecode( input [15:0] ird,
 	// Modify CCR (and not SR)
 	// Probably overkill !! Only needs to distinguish SR vs CCR
 	// RTR, MOVE to CCR, xxxI to CCR
-	assign Irdecod.toCcr =	( lineOnehot[4] & ((ird[11:0] == 12'he77) | (ird[11:6] == 6'b010011)) ) |
+	assign Irdecod_toCcr =	( lineOnehot[4] & ((ird[11:0] == 12'he77) | (ird[11:6] == 6'b010011)) ) |
 							( lineOnehot[0] & (ird[8:6] == 3'b000));
 	
 	// FTU constants
