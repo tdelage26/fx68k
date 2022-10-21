@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic isTas;
 	logic implicitSp;
 	logic toCcr;
 	logic rxIsDt, ryIsDt;
@@ -166,7 +165,7 @@ module fx68k(
 	
 	wire wClk;
 	
-	wire Irdecod_isPcRel;
+	wire Irdecod_isPcRel, Irdecod_isTas;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -357,9 +356,9 @@ module fx68k(
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
-	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel);
+	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
-	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel);
+	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -652,6 +651,7 @@ endmodule
 // Nanorom (plus) decoder for die nanocode
 module nDecoder3( input Clks_clk,
 	input Irdecod_isPcRel,
+	input Irdecod_isTas,
 	input s_irdecod Irdecod, output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -920,7 +920,7 @@ localparam NANO_FTU_CONST = 1;
 		// Originally isTas only delayed on T2 (and seems only a late mask rev fix)
 		// Better latch the combination on T4
 		if( enT4)
-			Nanod.isRmc <= Irdecod.isTas & nanoLatch[ NANO_BUSBYTE];
+			Nanod.isRmc <= Irdecod_isTas & nanoLatch[ NANO_BUSBYTE];
 	end
 			
 	
@@ -934,6 +934,7 @@ endmodule
 //
 module irdDecode( input [15:0] ird,
 			output Irdecod_isPcRel,
+			output Irdecod_isTas,
 			output s_irdecod Irdecod);
 
 	wire [3:0] line = ird[15:12];
@@ -946,7 +947,7 @@ module irdDecode( input [15:0] ird,
 	wire isDynShift = isRegShift & ird[5];
 					
 	assign Irdecod_isPcRel = (& ird[ 5:3]) & ~isDynShift & !ird[2] & ird[1];		
-	assign Irdecod.isTas = lineOnehot[4] & (ird[11:6] == 6'b101011);
+	assign Irdecod_isTas = lineOnehot[4] & (ird[11:6] == 6'b101011);
 	
 	assign Irdecod.rx = ird[11:9];
 	assign Irdecod.ry = ird[ 2:0];
@@ -1042,7 +1043,7 @@ module irdDecode( input [15:0] ird,
 		lineOnehot[1]:			Irdecod.isByte = 1'b1;		// MOVE.B
 	
 		
-		lineOnehot[4]:			Irdecod.isByte = (ird[7:6] == 2'b00) | Irdecod.isTas;		
+		lineOnehot[4]:			Irdecod.isByte = (ird[7:6] == 2'b00) | Irdecod_isTas;		
 		lineOnehot[5]:			Irdecod.isByte = (ird[7:6] == 2'b00) | xIsScc;
 		
 		lineOnehot[8],
