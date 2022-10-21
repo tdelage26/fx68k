@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic isPcRel;
 	logic isTas;
 	logic implicitSp;
 	logic toCcr;
@@ -167,6 +166,8 @@ module fx68k(
 	
 	wire wClk;
 	
+	wire Irdecod_isPcRel;
+
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
 	wire enT1 = Clks_enPhi1 & (tState == T4) & ~wClk;
@@ -356,9 +357,9 @@ module fx68k(
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
-	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch);
+	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel);
 	
-	irdDecode irdDecode( .ird( Ird), .Irdecod);
+	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -398,8 +399,8 @@ module fx68k(
 			rFC[2] <= pswS;
 			// If FC is type 'n' (0) at ucode, access type depends on PC relative mode		
 			// We don't care about RZ in this case. Those uinstructions with RZ don't start a bus cycle.
-			rFC[1] <= microLatch[ 16] | ( ~microLatch[ 15] & Irdecod.isPcRel);
-			rFC[0] <= microLatch[ 15] | ( ~microLatch[ 16] & ~Irdecod.isPcRel);
+			rFC[1] <= microLatch[ 16] | ( ~microLatch[ 15] & Irdecod_isPcRel);
+			rFC[0] <= microLatch[ 15] | ( ~microLatch[ 16] & ~Irdecod_isPcRel);
 		end
 	end
 	
@@ -650,6 +651,7 @@ endmodule
 
 // Nanorom (plus) decoder for die nanocode
 module nDecoder3( input Clks_clk,
+	input Irdecod_isPcRel,
 	input s_irdecod Irdecod, output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -873,7 +875,7 @@ localparam NANO_FTU_CONST = 1;
 	// PC used instead of RY on PC relative instuctions
 	
 	assign Nanod.rxlDbl = nanoLatch[ NANO_RXL_DBL];
-	wire isPcRel = Irdecod.isPcRel & !Nanod.rz;
+	wire isPcRel = Irdecod_isPcRel & !Nanod.rz;
 	wire pcRelDbl = isPcRel & !nanoLatch[ NANO_RXL_DBL];
 	wire pcRelDbh = isPcRel & !nanoLatch[ NANO_RXH_DBH];
 	wire pcRelAbl = isPcRel & nanoLatch[ NANO_RXL_DBL];
@@ -931,6 +933,7 @@ endmodule
 // decoded signals must be registered on T3, or T4 before using them.
 //
 module irdDecode( input [15:0] ird,
+			output Irdecod_isPcRel,
 			output s_irdecod Irdecod);
 
 	wire [3:0] line = ird[15:12];
@@ -942,7 +945,7 @@ module irdDecode( input [15:0] ird,
 	wire isRegShift = (lineOnehot['he]) & (ird[7:6] != 2'b11);
 	wire isDynShift = isRegShift & ird[5];
 					
-	assign Irdecod.isPcRel = (& ird[ 5:3]) & ~isDynShift & !ird[2] & ird[1];		
+	assign Irdecod_isPcRel = (& ird[ 5:3]) & ~isDynShift & !ird[2] & ird[1];		
 	assign Irdecod.isTas = lineOnehot[4] & (ird[11:6] == 6'b101011);
 	
 	assign Irdecod.rx = ird[11:9];
