@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic implicitSp;
 	logic toCcr;
 	logic rxIsDt, ryIsDt;
 	logic rxIsUsp, rxIsMovem, movemPreDecr;
@@ -165,7 +164,7 @@ module fx68k(
 	
 	wire wClk;
 	
-	wire Irdecod_isPcRel, Irdecod_isTas;
+	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -352,13 +351,14 @@ module fx68k(
 		.psw, .prenEmpty, .au05z, .dcr4, .ze, .alue01( alue[1:0]), .i11( Irc[ 11]) );
 
 	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
+		.Irdecod_implicitSp,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
-	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas);
+	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -935,6 +935,7 @@ endmodule
 module irdDecode( input [15:0] ird,
 			output Irdecod_isPcRel,
 			output Irdecod_isTas,
+			output Irdecod_implicitSp,
 			output s_irdecod Irdecod);
 
 	wire [3:0] line = ird[15:12];
@@ -976,13 +977,13 @@ module irdDecode( input [15:0] ird,
 							(ird[7] & ird[6]) |								// SUBA/CMPA/ADDA
 							(eaAreg & ird[8] & (ird[7:6] != 2'b11));		// SUBX/CMPM/ADDX		
 		default:
-				Irdecod.rxIsAreg = Irdecod.implicitSp;
+				Irdecod.rxIsAreg = Irdecod_implicitSp;
 		endcase
 	end	
 
 	// RX is movem
 	always_comb begin
-		Irdecod.rxIsMovem = lineOnehot[4] & ~ird[8] & ~Irdecod.implicitSp;
+		Irdecod.rxIsMovem = lineOnehot[4] & ~ird[8] & ~Irdecod_implicitSp;
 	end
 	assign Irdecod.movemPreDecr = Irdecod.rxIsMovem & isPreDecr;
 	
@@ -1068,11 +1069,11 @@ module irdDecode( input [15:0] ird,
 	
 	always_comb begin
 		unique case( 1'b1)
-		lineOnehot[6]:		Irdecod.implicitSp = (ird[11:8] == 4'b0001);		// BSR
+		lineOnehot[6]:		Irdecod_implicitSp = (ird[11:8] == 4'b0001);		// BSR
 		lineOnehot[4]:
 			// Misc like RTS, JSR, etc
-			Irdecod.implicitSp = (ird[11:8] == 4'b1110) | (ird[11:6] == 6'b1000_01);
-		default:			Irdecod.implicitSp = 1'b0;
+			Irdecod_implicitSp = (ird[11:8] == 4'b1110) | (ird[11:6] == 6'b1000_01);
+		default:			Irdecod_implicitSp = 1'b0;
 		endcase
 	end
 	
@@ -1150,6 +1151,7 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	input Clks_pwrUp, input Clks_enPhi2,
 	input enT1, enT2, enT3, enT4,
 	input s_nanod Nanod, input s_irdecod Irdecod,
+	input Irdecod_implicitSp,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
 	input pswS,
 	input [15:0] ftu,
@@ -1254,13 +1256,13 @@ localparam REG_DT = 17;
 			rxIsSp = 1'b1;
 			rxReg = 1'bX;
 		end
-		else if( Irdecod.rxIsDt & !Irdecod.implicitSp) begin
+		else if( Irdecod.rxIsDt & !Irdecod_implicitSp) begin
 			rxMux = REG_DT;
 			rxIsSp = 1'b0;
 			rxReg = 1'bX;
 		end
 		else begin
-			if( Irdecod.implicitSp)
+			if( Irdecod_implicitSp)
 				rxReg = 15;
 			else if( Irdecod.rxIsMovem)
 				rxReg = movemRx;
