@@ -43,12 +43,6 @@ localparam NANO_DOB_DBD = 2'b01;
 localparam NANO_DOB_ADB = 2'b10;
 localparam NANO_DOB_ALU = 2'b11;
 
-
-// Clocks, phases and resets
-typedef struct {
-	logic enPhi2;
-} s_clks;
-
 // IRD decoded signals
 typedef struct {
 	logic isPcRel;
@@ -158,30 +152,27 @@ module fx68k(
 	input [15:0] iEdb, output [15:0] oEdb,
 	output [23:1] eab
 	);
-	
-	// wire clock = Clks.clk;
-	s_clks Clks;
 
 	// extReset: 		External sync reset on emulated system
 	// pwrUp:	 		Asserted together with reset on emulated system coldstart
 	// enPhi1, enPhi2:	Clock enables. Next cycle is PHI1 or PHI2
 
-	wire Clks_clk, Clks_extReset, Clks_pwrUp, Clks_enPhi1;
+	wire Clks_clk, Clks_extReset, Clks_pwrUp, Clks_enPhi1, Clks_enPhi2;
 	
 	assign Clks_clk = clk;	
 	assign Clks_extReset = extReset;
 	assign Clks_pwrUp = pwrUp;	
 	assign Clks_enPhi1 = enPhi1;
-	assign Clks.enPhi2 = enPhi2;
+	assign Clks_enPhi2 = enPhi2;
 	
 	wire wClk;
 	
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
 	wire enT1 = Clks_enPhi1 & (tState == T4) & ~wClk;
-	wire enT2 = Clks.enPhi2 & (tState == T1);
+	wire enT2 = Clks_enPhi2 & (tState == T1);
 	wire enT3 = Clks_enPhi1 & (tState == T2);
-	wire enT4 = Clks.enPhi2 & ((tState == T0) | (tState == T3));
+	wire enT4 = Clks_enPhi2 & ((tState == T0) | (tState == T3));
 	
 	// T4 continues ticking during reset and group0 exception.
 	// We also need it to erase ucode output latched on T4.
@@ -190,10 +181,10 @@ module fx68k(
 			tState <= T0;
 		else begin
 		case( tState)
-		T0: if( Clks.enPhi2) tState <= T4;
-		T1: if( Clks.enPhi2) tState <= T2;
+		T0: if( Clks_enPhi2) tState <= T4;
+		T1: if( Clks_enPhi2) tState <= T2;
 		T2: if( Clks_enPhi1) tState <= T3;
-		T3: if( Clks.enPhi2) tState <= T4;
+		T3: if( Clks_enPhi2) tState <= T4;
 		T4: if( Clks_enPhi1) tState <= wClk ? T0 : T1;
 		endcase
 		end
@@ -219,7 +210,7 @@ module fx68k(
 			rBerr <= 1'b0;
 			BeI <= 1'b0;
 		end
-		else if( Clks.enPhi2) begin
+		else if( Clks_enPhi2) begin
 			rDtack <= DTACKn;
 			rBerr <= BERRn;
 			rIpl <= ~{ IPL2n, IPL1n, IPL0n};
@@ -354,13 +345,13 @@ module fx68k(
 
 	uaddrDecode uaddrDecode( .opcode( Ir), .a1, .a2, .a3, .isPriv, .isIllegal, .isLineA, .isLineF, .lineBmap());
 
-	sequencer sequencer( .Clks, .Clks_clk, .Clks_extReset, .enT3, .microLatch, .Ird,
+	sequencer sequencer( .Clks_clk, .Clks_extReset, .enT3, .microLatch, .Ird,
 		.A0Err, .excRst, .BerrA, .busAddrErr, .Spuria, .Avia,
 		.Tpend, .intPend, .isIllegal, .isPriv, .isLineA, .isLineF,
 		.nma, .a1, .a2, .a3, .tvn,
 		.psw, .prenEmpty, .au05z, .dcr4, .ze, .alue01( alue[1:0]), .i11( Irc[ 11]) );
 
-	excUnit excUnit( .Clks, .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
+	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
@@ -369,13 +360,13 @@ module fx68k(
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod);
 	
-	busControl busControl( .Clks, .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
+	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
 		.bciWrite, .addrOe, .bgBlock, .waitBusCycle, .busStarting, .busAddrErr,
 		.rDtack, .BeDebounced, .Vpai,
 		.ASn, .LDSn, .UDSn, .eRWn);
 		
-	busArbiter busArbiter( .Clks, .Clks_clk, .Clks_extReset, .Clks_enPhi1, .BRi, .BgackI, .Halti, .bgBlock, .busAvail, .BGn);
+	busArbiter busArbiter( .Clks_clk, .Clks_extReset, .Clks_enPhi1, .Clks_enPhi2, .BRi, .BgackI, .Halti, .bgBlock, .busAvail, .BGn);
 		
 		
 	// Output reset & halt control
@@ -428,7 +419,7 @@ module fx68k(
 			prevNmi <= 1'b0;
 		end
 		else begin
-			if( Clks.enPhi2)
+			if( Clks_enPhi2)
 				prevNmi <= nmi;
 				
 			// Originally async RS-Latch on PHI2, followed by a transparent latch on T2
@@ -438,7 +429,7 @@ module fx68k(
 			// Set on stable & NMI edge or compare
 			// Clear on: NMI Iack or (stable & !NMI & !Compare)
 
-			if( Clks.enPhi2) begin
+			if( Clks_enPhi2) begin
 				if( iplStable & ((nmi & ~prevNmi) | iplComp) )
 					intPend <= 1'b1;
 				else if( ((inl == 3'b111) & Iac) | (iplStable & !nmi & !iplComp) )
@@ -478,8 +469,8 @@ module fx68k(
 	wire xVma = ~rVma & (eCntr == 8);
 	
 `ifdef USE_E_CLKEN
-	assign E_PosClkEn = (Clks.enPhi2 & (eCntr == 5));
-	assign E_NegClkEn = (Clks.enPhi2 & (eCntr == 9));
+	assign E_PosClkEn = (Clks_enPhi2 & (eCntr == 5));
+	assign E_NegClkEn = (Clks_enPhi2 & (eCntr == 9));
 `endif
 	
 	always_ff @( posedge Clks_clk) begin
@@ -488,7 +479,7 @@ module fx68k(
 			eCntr <='0;
 			rVma <= 1'b1;
 		end
-		if( Clks.enPhi2) begin
+		if( Clks_enPhi2) begin
 			if( eCntr == 9)
 				E <= 1'b0;
 			else if( eCntr == 5)
@@ -500,7 +491,7 @@ module fx68k(
 				eCntr <= eCntr + 1'b1;
 		end
 		
-		if( Clks.enPhi2 & addrOe & ~Vpai & (eCntr == 3))
+		if( Clks_enPhi2 & addrOe & ~Vpai & (eCntr == 3))
 			rVma <= 1'b0;
 		else if( Clks_enPhi1 & eCntr == '0)
 			rVma <= 1'b1;
@@ -529,7 +520,7 @@ module fx68k(
 
 		if( Clks_extReset)
 			BerrA <= 1'b0;
-		else if( Clks.enPhi2) begin
+		else if( Clks_enPhi2) begin
 			if( ~BeI & ~Iac & addrOe)
 				BerrA <= 1'b1;
 			// else if( BeI & addrOe)			// Bad, async reset since addrOe raising edge
@@ -557,7 +548,7 @@ module fx68k(
 		end
 		else if( Clks_enPhi1)
 			Err6591 <= enErrClk;
-		else if( Clks.enPhi2)
+		else if( Clks_enPhi2)
 			iStop <= xVma | (Vpai & (iAddrErr | ~rBerr));
 	end
 	
@@ -1151,8 +1142,8 @@ endmodule
 
 */
 
-module excUnit( input s_clks Clks, input Clks_clk, input Clks_extReset, 
-	input Clks_pwrUp,
+module excUnit( input Clks_clk, input Clks_extReset, 
+	input Clks_pwrUp, input Clks_enPhi2,
 	input enT1, enT2, enT3, enT4,
 	input s_nanod Nanod, input s_irdecod Irdecod,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
@@ -1681,7 +1672,7 @@ localparam REG_DT = 17;
 		endcase
 	end
 
-	dataIo dataIo( .Clks_clk, .Clks, .enT1, .enT2, .enT3, .enT4, .Nanod, .Irdecod,
+	dataIo dataIo( .Clks_clk, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4, .Nanod, .Irdecod,
 			.iEdb, .dobIdle, .dobInput, .aob0,
 			.Irc, .dbin, .oEdb);
 
@@ -1706,7 +1697,7 @@ endmodule
 // Input is latched async at the EDB register.
 // We capture directly from the external data bus to the internal registers (IRC & DBIN) on PHI2, starting the external S7 phase, at a T4 internal period.
 
-module dataIo( input s_clks Clks, input Clks_clk,
+module dataIo( input Clks_clk, input Clks_enPhi2,
 	input enT1, enT2, enT3, enT4,
 	input s_nanod Nanod, input s_irdecod Irdecod,
 	input [15:0] iEdb,
@@ -1761,9 +1752,9 @@ module dataIo( input s_clks Clks, input Clks_clk,
 		// Capture on T4 of the next ucycle
 		// If there are wait states, we keep capturing every PHI2 until the next T1
 		
-		if( xToIrc & Clks.enPhi2)
+		if( xToIrc & Clks_enPhi2)
 			Irc <= iEdb;
-		if( xToDbin & Clks.enPhi2) begin
+		if( xToDbin & Clks_enPhi2) begin
 			// Original connects both halves of EDB.
 			if( ~dbinNoLow)
 				dbin[ 7:0] <= byteMux ? iEdb[ 15:8] : iEdb[7:0];
@@ -1942,7 +1933,7 @@ endmodule
 
 // Microcode sequencer
 
-module sequencer( input s_clks Clks, input Clks_clk, input Clks_extReset,
+module sequencer( input Clks_clk, input Clks_extReset,
 	input enT3,
 	input [UROM_WIDTH-1:0] microLatch,
 	input A0Err, BerrA, busAddrErr, Spuria, Avia,
@@ -2184,7 +2175,7 @@ endmodule
 // DMA/BUS Arbitration
 //
 
-module busArbiter( input s_clks Clks, input Clks_clk, 
+module busArbiter( input Clks_clk, input Clks_enPhi2,
 		input Clks_extReset, input Clks_enPhi1,
 		input BRi, BgackI, Halti, bgBlock,
 		output busAvail,
@@ -2253,7 +2244,7 @@ module busArbiter( input s_clks Clks, input Clks_clk,
 			dmaPhase <= DRESET;
 			rGranted <= 1'b0;
 		end
-		else if( Clks.enPhi2) begin
+		else if( Clks_enPhi2) begin
 			dmaPhase <= next;
 			// Internal signal changed on PHI2
 			rGranted <= granting;
@@ -2269,8 +2260,8 @@ module busArbiter( input s_clks Clks, input Clks_clk,
 			
 endmodule
 
-module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset, 
-		input Clks_pwrUp, input Clks_enPhi1,
+module busControl( input Clks_clk, input Clks_extReset, 
+		input Clks_pwrUp, input Clks_enPhi1, input Clks_enPhi2,
 		input enT1, input enT4,
 		input permStart, permStop, iStop,
 		input aob0,
@@ -2366,7 +2357,7 @@ module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset,
 		if( Clks_extReset) begin
 			addrOe <= 1'b0;
 		end
-		else if( Clks.enPhi2 & ( busPhase == S0))			// From S1, whole bus cycle except S0
+		else if( Clks_enPhi2 & ( busPhase == S0))			// From S1, whole bus cycle except S0
 				addrOe <= 1'b1;
 		else if( Clks_enPhi1 & (busPhase == SRMC_RES))
 			addrOe <= 1'b0;
@@ -2385,7 +2376,7 @@ module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset,
 		end
 		else begin
 
-			if( Clks.enPhi2 & isWriteReg & (busPhase == S2))
+			if( Clks_enPhi2 & isWriteReg & (busPhase == S2))
 				dataOe <= 1'b1;
 			else if( Clks_enPhi1 & (busEnding | (busPhase == SIDLE)) )
 				dataOe <= 1'b0;
@@ -2401,9 +2392,9 @@ module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset,
 			// AS. Actually follows addrOe half cycle later!
 			if( Clks_enPhi1 & (busPhase == S0))
 				rAS <= 1'b0;
-			else if( Clks.enPhi2 & (busPhase == SRMC_RES))		// Bus error on read phase of RMC. Deasserted one cycle later
+			else if( Clks_enPhi2 & (busPhase == SRMC_RES))		// Bus error on read phase of RMC. Deasserted one cycle later
 				rAS <= 1'b1;			
-			else if( Clks.enPhi2 & bcComplete & ~SRMC_RES)
+			else if( Clks_enPhi2 & bcComplete & ~SRMC_RES)
 				if( ~isRmcReg)									// Keep AS asserted on the IDLE phase of RMC
 					rAS <= 1'b1;
 			
@@ -2417,7 +2408,7 @@ module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset,
 					rUDS <= ~(~bciByte | ~aob0);
 					rLDS <= ~(~bciByte | aob0);
 			end		
-			else if( Clks.enPhi2 & bcComplete) begin
+			else if( Clks_enPhi2 & bcComplete) begin
 				rUDS <= 1'b1;
 				rLDS <= 1'b1;
 			end
@@ -2451,7 +2442,7 @@ module busControl( input s_clks Clks, input Clks_clk, input Clks_extReset,
 			isRmcReg <= 1'b0;		
 		end
 		
-		else if( Clks.enPhi2 & (bciClear | bcReset)) begin
+		else if( Clks_enPhi2 & (bciClear | bcReset)) begin
 			bcPend <= 1'b0;
 			wendReg <= 1'b0;
 		end
