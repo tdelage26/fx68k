@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic updTpend, clrTpend;
 	logic tvn2Ftu, const2Ftu;
 	logic ftu2Dbl, ftu2Abl;
 	logic abl2Pren, updPren;
@@ -153,7 +152,7 @@ module fx68k(
 	wire [5:0] Irdecod_macroTvn;
 
 	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc, Nanod_noLowByte;
-	wire Nanod_noHighByte;
+	wire Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -344,7 +343,7 @@ module fx68k(
 		.alue, .ccr);
 
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
-		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte);
+		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
@@ -558,9 +557,9 @@ module fx68k(
 		else if( enT3) begin
 		
 			// UNIQUE IF !!	
-			if( Nanod.updTpend)
+			if( Nanod_updTpend)
 				Tpend <= pswT;
-			else if( Nanod.clrTpend)
+			else if( Nanod_clrTpend)
 				Tpend <= 1'b0;
 			
 			// UNIQUE IF !!	
@@ -643,7 +642,7 @@ module nDecoder3( input Clks_clk,
 	input Irdecod_isPcRel,
 	input Irdecod_isTas,
 	output Nanod_permStart,Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc, Nanod_noLowByte,
-	Nanod_noHighByte,
+	Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend,
 	output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -778,8 +777,8 @@ localparam NANO_FTU_CONST = 1;
 	// Update SSW at the start of Bus/Addr error ucode
 	assign Nanod.updSsw = Nanod.aob2Ab;
 
-	assign Nanod.updTpend = (ftuCtrl == NANO_FTU_UPDTPEND);
-	assign Nanod.clrTpend = (ftuCtrl == NANO_FTU_CLRTPEND);
+	assign Nanod_updTpend = (ftuCtrl == NANO_FTU_UPDTPEND);
+	assign Nanod_clrTpend = (ftuCtrl == NANO_FTU_CLRTPEND);
 	assign Nanod.tvn2Ftu = (ftuCtrl == NANO_FTU_TVN);
 	assign Nanod.const2Ftu = (ftuCtrl == NANO_FTU_CONST);
 	assign Nanod.ftu2Dbl = (ftuCtrl == NANO_FTU_DBL) | ( ftuCtrl == NANO_FTU_INL);	
