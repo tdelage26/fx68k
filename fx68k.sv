@@ -74,7 +74,6 @@ typedef struct {
 	logic rz;
 	logic rxlDbl;
 	
-	logic [1:0] aluDctrl;
 	logic aluActrl;
 	logic aluInit, aluFinish;
 	logic abd2Dcr, dcr2Dbd;
@@ -150,6 +149,7 @@ module fx68k(
 	wire [2:0] Nanod_auCntrl;
 	wire [1:0] Nanod_dobCtrl;
 	wire [2:0] Nanod_aluColumn;
+	wire [1:0] Nanod_aluDctrl;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -335,7 +335,7 @@ module fx68k(
 	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .enT1, .enT2, .enT3, .enT4,
 		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
 		.Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Nanod_busByte, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_ftu2Dbl,
-		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr, .Nanod_auCntrl, .Nanod_dobCtrl, .Nanod_aluColumn,
+		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr, .Nanod_auCntrl, .Nanod_dobCtrl, .Nanod_aluColumn, .Nanod_aluDctrl,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
@@ -343,7 +343,7 @@ module fx68k(
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
 		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend, .Nanod_tvn2Ftu, .Nanod_const2Ftu, .Nanod_ftu2Dbl, .Nanod_ftu2Abl,
 		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu, .Nanod_ftu2Ccr, .Nanod_pswIToFtu, .Nanod_initST, .Nanod_auCntrl, .Nanod_dobCtrl,
-		.Nanod_aluColumn);
+		.Nanod_aluColumn, .Nanod_aluDctrl);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
@@ -649,6 +649,7 @@ module nDecoder3( input Clks_clk,
 	output [2:0] Nanod_auCntrl,
 	output [1:0] Nanod_dobCtrl,
 	output [2:0] Nanod_aluColumn,
+	output [1:0] Nanod_aluDctrl,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
 	input [NANO_WIDTH-1:0] nanoLatch);
@@ -802,7 +803,7 @@ localparam NANO_FTU_CONST = 1;
 
 	// ALU control better latched later after combining with IRD decoding
 		
-	assign Nanod.aluDctrl = nanoLatch[ NANO_ALU_DCTRL+1 : NANO_ALU_DCTRL];
+	assign Nanod_aluDctrl = nanoLatch[ NANO_ALU_DCTRL+1 : NANO_ALU_DCTRL];
 	assign Nanod.aluActrl = nanoLatch[ NANO_ALU_ACTRL];
 	assign Nanod_aluColumn = { nanoLatch[ NANO_ALU_COL], nanoLatch[ NANO_ALU_COL+1], nanoLatch[ NANO_ALU_COL+2]};
 	wire [1:0] aluFinInit = nanoLatch[ NANO_ALU_FI+1:NANO_ALU_FI];
@@ -1156,6 +1157,7 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	input [2:0] Nanod_auCntrl,
 	input [1:0] Nanod_dobCtrl,
 	input [2:0] Nanod_aluColumn,
+	input [1:0] Nanod_aluDctrl,
 	input [15:0] ftu,
 	input [15:0] iEdb,
 	
@@ -1691,7 +1693,7 @@ localparam REG_DT = 17;
 		.init( Nanod.aluInit), .finish( Nanod.aluFinish), .aluIsByte( Irdecod_isByte),
 		.ftu2Ccr( Nanod_ftu2Ccr),
 		.alub, .ftu, .alueClkEn, .alue,
-		.aluDataCtrl( Nanod.aluDctrl), .iDataBus( Dbd), .iAddrBus(Abd),
+		.aluDataCtrl( Nanod_aluDctrl), .iDataBus( Dbd), .iAddrBus(Abd),
 		.ze, .aluOut, .ccr);
 
 endmodule
