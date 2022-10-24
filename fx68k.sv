@@ -56,8 +56,6 @@ typedef struct {
 	
 	logic db2Aob, ab2Aob, au2Aob;
 	logic aob2Ab, updSsw;
-	// logic adb2Dob, dbd2Dob, alu2Dob;
-	logic [1:0] dobCtrl;
 	
 	logic abh2reg, abl2reg;
 	logic reg2abl, reg2abh;
@@ -145,11 +143,13 @@ module fx68k(
 	wire [15:0] Irdecod_ftuConst;
 	wire [5:0] Irdecod_macroTvn;
 
+	// wire Nanod_adb2Dob, Nanod_dbd2Dob, Nanod_alu2Dob;
 	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc, Nanod_noLowByte;
 	wire Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl;
 	wire Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr;
 	wire Nanod_pswIToFtu, Nanod_initST;
 	wire [2:0] Nanod_auCntrl;
+	wire [1:0] Nanod_dobCtrl;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -335,14 +335,14 @@ module fx68k(
 	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .enT1, .enT2, .enT3, .enT4,
 		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
 		.Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Nanod_busByte, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_ftu2Dbl,
-		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr, .Nanod_auCntrl,
+		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr, .Nanod_auCntrl, .Nanod_dobCtrl,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
 		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend, .Nanod_tvn2Ftu, .Nanod_const2Ftu, .Nanod_ftu2Dbl, .Nanod_ftu2Abl,
-		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu, .Nanod_ftu2Ccr, .Nanod_pswIToFtu, .Nanod_initST, .Nanod_auCntrl);
+		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu, .Nanod_ftu2Ccr, .Nanod_pswIToFtu, .Nanod_initST, .Nanod_auCntrl, .Nanod_dobCtrl);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
@@ -646,6 +646,7 @@ module nDecoder3( input Clks_clk,
 	output Nanod_pswIToFtu, Nanod_initST,
 	output s_nanod Nanod,
 	output [2:0] Nanod_auCntrl,
+	output [1:0] Nanod_dobCtrl,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
 	input [NANO_WIDTH-1:0] nanoLatch);
@@ -770,7 +771,7 @@ localparam NANO_FTU_CONST = 1;
 			Nanod.abd2Alub <= nanoLatch[ NANO_ABD2ALUB];			
 			
 			// Originally not latched. We better should because we transfer one cycle later, T3 instead of T1.
-			Nanod.dobCtrl <= dobCtrl;
+			Nanod_dobCtrl <= dobCtrl;
 			// Nanod.adb2Dob <= (dobCtrl == 2'b10);			Nanod.dbd2Dob <= (dobCtrl == 2'b01);			Nanod.alu2Dob <= (dobCtrl == 2'b11);
 							
 		end
@@ -1151,6 +1152,7 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
 	input pswS,
 	input [2:0] Nanod_auCntrl,
+	input [1:0] Nanod_dobCtrl,
 	input [15:0] ftu,
 	input [15:0] iEdb,
 	
@@ -1664,10 +1666,10 @@ localparam REG_DT = 17;
 	// DOB/DBIN/IRC
 	
 	logic [15:0] dobInput;
-	wire dobIdle = (~| Nanod.dobCtrl);
+	wire dobIdle = (~| Nanod_dobCtrl);
 	
 	always_comb begin
-		unique case (Nanod.dobCtrl)
+		unique case (Nanod_dobCtrl)
 		NANO_DOB_ADB:		dobInput = Abd;
 		NANO_DOB_DBD:		dobInput = Dbd;
 		NANO_DOB_ALU:		dobInput = aluOut;
