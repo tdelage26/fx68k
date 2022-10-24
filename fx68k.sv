@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic permStart;
 	logic waitBusFinish;
 	logic isWrite;
 	logic busByte;
@@ -158,6 +157,8 @@ module fx68k(
 	wire [2:0] Irdecod_ry;
 	wire [15:0] Irdecod_ftuConst;
 	wire [5:0] Irdecod_macroTvn;
+
+	wire Nanod_permStart;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -347,13 +348,13 @@ module fx68k(
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
-	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
+	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
 		.Irdecod_macroTvn, .Irdecod_inhibitCcr);
 	
-	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
+	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod_permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
 		.bciWrite, .addrOe, .bgBlock, .waitBusCycle, .busStarting, .busAddrErr,
 		.rDtack, .BeDebounced, .Vpai,
@@ -375,8 +376,8 @@ module fx68k(
 			oHalted <= 1'b0;
 		end
 		else if( enT1) begin
-			oReset <= (uFc == 2'b01) & !Nanod.permStart;
-			oHalted <= (uFc == 2'b10) & !Nanod.permStart;
+			oReset <= (uFc == 2'b01) & !Nanod_permStart;
+			oHalted <= (uFc == 2'b10) & !Nanod_permStart;
 		end
 	end
 		
@@ -387,7 +388,7 @@ module fx68k(
 	always_ff @( posedge Clks_clk) begin
 		if( Clks_extReset)
 			rFC <= '0;
-		else if( enT1 & Nanod.permStart) begin		// S0 phase of bus cycle
+		else if( enT1 & Nanod_permStart) begin		// S0 phase of bus cycle
 			rFC[2] <= pswS;
 			// If FC is type 'n' (0) at ucode, access type depends on PC relative mode		
 			// We don't care about RZ in this case. Those uinstructions with RZ don't start a bus cycle.
@@ -525,7 +526,7 @@ module fx68k(
 		// Originally cleared on 1st T2 after permstart. Must keep it until TVN latched.
 		if( Clks_extReset)
 			excRst <= 1'b1;
-		else if( enT2 & Nanod.permStart)
+		else if( enT2 & Nanod_permStart)
 			excRst <= 1'b0;
 		
 		if( Clks_extReset)
@@ -645,6 +646,7 @@ endmodule
 module nDecoder3( input Clks_clk,
 	input Irdecod_isPcRel,
 	input Irdecod_isTas,
+	output Nanod_permStart,
 	output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -825,7 +827,7 @@ localparam NANO_FTU_CONST = 1;
 	assign Nanod.dbin2Abd = nanoLatch[ NANO_DBIN2ABD];
 	assign Nanod.dbin2Dbd = nanoLatch[ NANO_DBIN2DBD];
 	
-	assign Nanod.permStart = (| aobCtrl);
+	assign Nanod_permStart = (| aobCtrl);
 	assign Nanod.isWrite  = ( | dobCtrl);
 	assign Nanod.waitBusFinish = nanoLatch[ NANO_TOIRC] | nanoLatch[ NANO_TODBIN] | Nanod.isWrite;
 	assign Nanod.busByte = nanoLatch[ NANO_BUSBYTE];
