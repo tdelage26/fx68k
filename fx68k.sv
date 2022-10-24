@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic isWrite;
 	logic busByte;
 	logic isRmc;
 	logic noLowByte, noHighByte;
@@ -157,7 +156,7 @@ module fx68k(
 	wire [15:0] Irdecod_ftuConst;
 	wire [5:0] Irdecod_macroTvn;
 
-	wire Nanod_permStart, Nanod_waitBusFinish;
+	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -347,14 +346,14 @@ module fx68k(
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
-	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish);
+	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
 		.Irdecod_macroTvn, .Irdecod_inhibitCcr);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod_permStart), .permStop( Nanod_waitBusFinish), .iStop,
-		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
+		.aob0, .isWrite( Nanod_isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
 		.bciWrite, .addrOe, .bgBlock, .waitBusCycle, .busStarting, .busAddrErr,
 		.rDtack, .BeDebounced, .Vpai,
 		.ASn, .LDSn, .UDSn, .eRWn);
@@ -645,7 +644,7 @@ endmodule
 module nDecoder3( input Clks_clk,
 	input Irdecod_isPcRel,
 	input Irdecod_isTas,
-	output Nanod_permStart,Nanod_waitBusFinish,
+	output Nanod_permStart,Nanod_waitBusFinish, Nanod_isWrite,
 	output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -827,8 +826,8 @@ localparam NANO_FTU_CONST = 1;
 	assign Nanod.dbin2Dbd = nanoLatch[ NANO_DBIN2DBD];
 	
 	assign Nanod_permStart = (| aobCtrl);
-	assign Nanod.isWrite  = ( | dobCtrl);
-	assign Nanod_waitBusFinish = nanoLatch[ NANO_TOIRC] | nanoLatch[ NANO_TODBIN] | Nanod.isWrite;
+	assign Nanod_isWrite  = ( | dobCtrl);
+	assign Nanod_waitBusFinish = nanoLatch[ NANO_TOIRC] | nanoLatch[ NANO_TODBIN] | Nanod_isWrite;
 	assign Nanod.busByte = nanoLatch[ NANO_BUSBYTE];
 	
 	assign Nanod.noLowByte = nanoLatch[ NANO_LOWBYTE];
