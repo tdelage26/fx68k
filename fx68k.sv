@@ -45,7 +45,7 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic ftu2Ccr, pswIToFtu;
+	logic pswIToFtu;
 	logic ird2Ftu, ssw2Ftu;
 	logic initST;
 	logic Ir2Ird;
@@ -150,7 +150,7 @@ module fx68k(
 
 	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc, Nanod_noLowByte;
 	wire Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl;
-	wire Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu;
+	wire Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -336,14 +336,14 @@ module fx68k(
 	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .enT1, .enT2, .enT3, .enT4,
 		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
 		.Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Nanod_busByte, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_ftu2Dbl,
-		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren,
+		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
 		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend, .Nanod_tvn2Ftu, .Nanod_const2Ftu, .Nanod_ftu2Dbl, .Nanod_ftu2Abl,
-		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu);
+		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu, .Nanod_ftu2Ccr);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
@@ -643,7 +643,7 @@ module nDecoder3( input Clks_clk,
 	input Irdecod_isTas,
 	output Nanod_permStart,Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc, Nanod_noLowByte,
 	output Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl,
-	output Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu,
+	output Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr,
 	output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -808,7 +808,7 @@ localparam NANO_FTU_CONST = 1;
 	// FTU 2 CCR encoded as both ALU Init and ALU Finish set.
 	// In theory this encoding allows writes to CCR without writing to SR
 	// But FTU 2 CCR and to SR are both set together at nanorom.
-	assign Nanod.ftu2Ccr = ( aluFinInit == 2'b11);
+	assign Nanod_ftu2Ccr = ( aluFinInit == 2'b11);
 
 	assign Nanod.abdIsByte = nanoLatch[ NANO_ABDHRECHARGE];
 	
@@ -1145,7 +1145,7 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	input s_nanod Nanod,
 	input Irdecod_implicitSp, Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr,
 	input Irdecod_isByte, Irdecod_rxIsAreg, Irdecod_ryIsAreg, Nanod_busByte, Nanod_noLowByte, Nanod_noHighByte, Nanod_ftu2Dbl,
-	input Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren,
+	input Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_ftu2Ccr,
 	input [2:0] Irdecod_rx, Irdecod_ry,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
 	input pswS,
@@ -1682,7 +1682,7 @@ localparam REG_DT = 17;
 		.ird( Ird),
 		.aluColumn( Nanod.aluColumn), .aluAddrCtrl( Nanod.aluActrl),
 		.init( Nanod.aluInit), .finish( Nanod.aluFinish), .aluIsByte( Irdecod_isByte),
-		.ftu2Ccr( Nanod.ftu2Ccr),
+		.ftu2Ccr( Nanod_ftu2Ccr),
 		.alub, .ftu, .alueClkEn, .alue,
 		.aluDataCtrl( Nanod.aluDctrl), .iDataBus( Dbd), .iAddrBus(Abd),
 		.ze, .aluOut, .ccr);
