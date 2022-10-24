@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic [5:0] macroTvn;
 	logic inhibitCcr;
 } s_irdecod;
 
@@ -163,6 +162,8 @@ module fx68k(
 	wire [2:0] Irdecod_rx;
 	wire [2:0] Irdecod_ry;
 	wire [15:0] Irdecod_ftuConst;
+	wire [5:0] Irdecod_macroTvn;
+
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
 	wire enT1 = Clks_enPhi1 & (tState == T4) & ~wClk;
@@ -357,7 +358,8 @@ module fx68k(
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
-		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst);
+		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
+		.Irdecod_macroTvn);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -642,7 +644,7 @@ module fx68k(
 				tvnMux = {10'b0, tvnLatch, 2'b00};
 		end
 		else
-			tvnMux = { 8'h0, Irdecod.macroTvn, 2'b00};
+			tvnMux = { 8'h0, Irdecod_macroTvn, 2'b00};
 	end
 				
 endmodule
@@ -931,7 +933,7 @@ endmodule
 // IRD updated on T1, while ncode still executing. To avoid using the next IRD,
 // decoded signals must be registered on T3, or T4 before using them.
 //
-module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod_ftuConst,
+module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod_ftuConst, output [5:0]Irdecod_macroTvn,
 			output Irdecod_isTas, output Irdecod_implicitSp, output [2:0] Irdecod_rx, output [2:0] Irdecod_ry, 
 			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
@@ -1115,13 +1117,13 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 	always_comb begin
 		if( lineOnehot[4]) begin
 			case ( ird[6:5])
-			2'b00,2'b01:	Irdecod.macroTvn = 6;					// CHK
-			2'b11:			Irdecod.macroTvn = 7;					// TRAPV
-			2'b10:			Irdecod.macroTvn = {2'b10, ird[3:0]};	// TRAP
+			2'b00,2'b01:	Irdecod_macroTvn = 6;					// CHK
+			2'b11:			Irdecod_macroTvn = 7;					// TRAPV
+			2'b10:			Irdecod_macroTvn = {2'b10, ird[3:0]};	// TRAP
 			endcase
 		end
 		else
-							Irdecod.macroTvn = 5;					// Division by zero
+							Irdecod_macroTvn = 5;					// Division by zero
 	end
 	
 	
