@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic isMovep;
 	logic [2:0] rx, ry;
 	logic rxIsAreg, ryIsAreg;
 	logic [15:0] ftuConst;
@@ -162,7 +161,7 @@ module fx68k(
 	
 	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp, Irdecod_toCcr;
 	wire Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr;
-	wire Irdecod_isByte;
+	wire Irdecod_isByte, Irdecod_isMovep;
 
 
 	// Internal sub clocks T1-T4
@@ -324,7 +323,7 @@ module fx68k(
 	wire bgBlock, busAvail;
 	wire addrOe;
 
-	wire busIsByte = Nanod.busByte & (Irdecod_isByte | Irdecod.isMovep);
+	wire busIsByte = Nanod.busByte & (Irdecod_isByte | Irdecod_isMovep);
 	wire aob0;
 	
 	reg iStop;								// Internal signal for ending bus cycle
@@ -358,7 +357,7 @@ module fx68k(
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
-		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte);
+		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -934,7 +933,7 @@ endmodule
 //
 module irdDecode( input [15:0] ird, output Irdecod_isPcRel,
 			output Irdecod_isTas, output Irdecod_implicitSp,
-			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte,
+			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
 			output s_irdecod Irdecod);
 
@@ -1059,7 +1058,7 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel,
 	end	
 	
 	// Need it for special byte size. Bus is byte, but whole register word is modified.
-	assign Irdecod.isMovep = lineOnehot[0] & ird[8] & eaAreg;
+	assign Irdecod_isMovep = lineOnehot[0] & ird[8] & eaAreg;
 	
 	
 	// rxIsSP implicit use of RX for actual SP transfer
