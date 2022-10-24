@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic isByte;
 	logic isMovep;
 	logic [2:0] rx, ry;
 	logic rxIsAreg, ryIsAreg;
@@ -163,6 +162,7 @@ module fx68k(
 	
 	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp, Irdecod_toCcr;
 	wire Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr;
+	wire Irdecod_isByte;
 
 
 	// Internal sub clocks T1-T4
@@ -324,7 +324,7 @@ module fx68k(
 	wire bgBlock, busAvail;
 	wire addrOe;
 
-	wire busIsByte = Nanod.busByte & (Irdecod.isByte | Irdecod.isMovep);
+	wire busIsByte = Nanod.busByte & (Irdecod_isByte | Irdecod.isMovep);
 	wire aob0;
 	
 	reg iStop;								// Internal signal for ending bus cycle
@@ -350,7 +350,7 @@ module fx68k(
 		.psw, .prenEmpty, .au05z, .dcr4, .ze, .alue01( alue[1:0]), .i11( Irc[ 11]) );
 
 	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
-		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr,
+		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
@@ -358,7 +358,7 @@ module fx68k(
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
-		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr);
+		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -934,7 +934,7 @@ endmodule
 //
 module irdDecode( input [15:0] ird, output Irdecod_isPcRel,
 			output Irdecod_isTas, output Irdecod_implicitSp,
-			output Irdecod_toCcr, output Irdecod_rxIsDt, 
+			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
 			output s_irdecod Irdecod);
 
@@ -1035,26 +1035,26 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel,
 	always_comb begin
 		unique case( 1'b1)
 		lineOnehot[0]:
-				Irdecod.isByte = 
+				Irdecod_isByte = 
 				( ird[8] & (ird[5:4] != 2'b00)					) |	// Dynamic bit to mem
 				( (ird[11:8] == 4'b1000) & (ird[5:4] != 2'b00)	) |	// Static bit to mem
 				( (ird[8:7] == 2'b10) & (ird[5:3] == 3'b001)	) |	// Movep from mem only! For byte mux
 				( (ird[8:6] == 3'b000) & !xStaticMem );				// Immediate byte
 								
-		lineOnehot[1]:			Irdecod.isByte = 1'b1;		// MOVE.B
+		lineOnehot[1]:			Irdecod_isByte = 1'b1;		// MOVE.B
 	
 		
-		lineOnehot[4]:			Irdecod.isByte = (ird[7:6] == 2'b00) | Irdecod_isTas;		
-		lineOnehot[5]:			Irdecod.isByte = (ird[7:6] == 2'b00) | xIsScc;
+		lineOnehot[4]:			Irdecod_isByte = (ird[7:6] == 2'b00) | Irdecod_isTas;		
+		lineOnehot[5]:			Irdecod_isByte = (ird[7:6] == 2'b00) | xIsScc;
 		
 		lineOnehot[8],
 		lineOnehot[9],
 		lineOnehot['hb],
 		lineOnehot['hc],
 		lineOnehot['hd],
-		lineOnehot['he]:		Irdecod.isByte = (ird[7:6] == 2'b00);
+		lineOnehot['he]:		Irdecod_isByte = (ird[7:6] == 2'b00);
 		
-		default:				Irdecod.isByte = 1'b0;
+		default:				Irdecod_isByte = 1'b0;
 		endcase
 	end	
 	
@@ -1148,10 +1148,11 @@ endmodule
 */
 
 module excUnit( input Clks_clk, input Clks_extReset, 
-	input Clks_pwrUp, input Clks_enPhi2,
+	input Clks_pwrUp, input Clks_enPhi2, 
 	input enT1, enT2, enT3, enT4,
 	input s_nanod Nanod, input s_irdecod Irdecod,
 	input Irdecod_implicitSp, Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr,
+	input Irdecod_isByte,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
 	input pswS,
 	input [15:0] ftu,
@@ -1298,7 +1299,7 @@ localparam REG_DT = 17;
 	
 	always_ff @( posedge Clks_clk) begin
 		if( enT4) begin
-			byteNotSpAlign <= Irdecod.isByte & ~(Nanod.rxlDbl ? rxIsSp : ryIsSp);
+			byteNotSpAlign <= Irdecod_isByte & ~(Nanod.rxlDbl ? rxIsSp : ryIsSp);
 				
 			actualRx <= rxMux;
 			actualRy <= ryMux;
@@ -1308,7 +1309,7 @@ localparam REG_DT = 17;
 		end
 		
 		if( enT4)
-			abdIsByte <= Nanod.abdIsByte & Irdecod.isByte;
+			abdIsByte <= Nanod.abdIsByte & Irdecod_isByte;
 	end
 			
 	// Set RX/RY low word to which bus segment is connected.
@@ -1679,14 +1680,14 @@ localparam REG_DT = 17;
 	end
 
 	dataIo dataIo( .Clks_clk, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4, .Nanod, .Irdecod,
-			.iEdb, .dobIdle, .dobInput, .aob0,
+			.iEdb, .dobIdle, .dobInput, .aob0, .Irdecod_isByte,
 			.Irc, .dbin, .oEdb);
 
 	fx68kAlu alu(
 		.clk( Clks_clk), .pwrUp( Clks_pwrUp), .enT1, .enT3, .enT4,
 		.ird( Ird),
 		.aluColumn( Nanod.aluColumn), .aluAddrCtrl( Nanod.aluActrl),
-		.init( Nanod.aluInit), .finish( Nanod.aluFinish), .aluIsByte( Irdecod.isByte),
+		.init( Nanod.aluInit), .finish( Nanod.aluFinish), .aluIsByte( Irdecod_isByte),
 		.ftu2Ccr( Nanod.ftu2Ccr),
 		.alub, .ftu, .alueClkEn, .alue,
 		.aluDataCtrl( Nanod.aluDctrl), .iDataBus( Dbd), .iAddrBus(Abd),
@@ -1704,7 +1705,7 @@ endmodule
 // We capture directly from the external data bus to the internal registers (IRC & DBIN) on PHI2, starting the external S7 phase, at a T4 internal period.
 
 module dataIo( input Clks_clk, input Clks_enPhi2,
-	input enT1, enT2, enT3, enT4,
+	input enT1, enT2, enT3, enT4, Irdecod_isByte,
 	input s_nanod Nanod, input s_irdecod Irdecod,
 	input [15:0] iEdb,
 	input aob0,
@@ -1737,7 +1738,7 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 		// Can't latch at T3, a new IRD might be loaded already at T1.	
 		// Ok to latch at T4 if combination latched then at T3
 		if( enT4)
-			isByte_T4 <= Irdecod.isByte;	// Includes MOVEP from mem, we could OR it here
+			isByte_T4 <= Irdecod_isByte;	// Includes MOVEP from mem, we could OR it here
 
 		if( enT3) begin
 			dbinNoHigh <= Nanod.noHighByte;
@@ -1780,7 +1781,7 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 		// Wait states don't affect DOB operation that is done at the start of the bus cycle. 
 
 		if( enT4)
-			byteCycle <= Nanod.busByte & Irdecod.isByte;		// busIsByte but not MOVEP
+			byteCycle <= Nanod.busByte & Irdecod_isByte;		// busIsByte but not MOVEP
 		
 		// Originally byte low/high interconnect is done at EDB, not at DOB.
 		if( enT3 & ~dobIdle) begin
