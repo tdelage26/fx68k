@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // IRD decoded signals
 typedef struct {
-	logic [15:0] ftuConst;
 	logic [5:0] macroTvn;
 	logic inhibitCcr;
 } s_irdecod;
@@ -163,7 +162,7 @@ module fx68k(
 	reg Irdecod_rxIsAreg, Irdecod_ryIsAreg;
 	wire [2:0] Irdecod_rx;
 	wire [2:0] Irdecod_ry;
-
+	wire [15:0] Irdecod_ftuConst;
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
 	wire enT1 = Clks_enPhi1 & (tState == T4) & ~wClk;
@@ -358,7 +357,7 @@ module fx68k(
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
-		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg);
+		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -623,7 +622,7 @@ module fx68k(
 			Nanod.ird2Ftu:				ftu <= Ird;
 			Nanod.ssw2Ftu:				ftu[4:0] <= ssw;						// Undoc. Other bits must be preserved from IRD saved above!
 			Nanod.pswIToFtu:			ftu <= { 12'hFFF, pswI, 1'b0};			// Interrupt level shifted
-			Nanod.const2Ftu:			ftu <= Irdecod.ftuConst;
+			Nanod.const2Ftu:			ftu <= Irdecod_ftuConst;
 			Nanod.abl2Pren:				ftu <= Abl;								// From ALU or datareg. Used for SR modify
 			default:					ftu <= ftu;
 			endcase
@@ -932,7 +931,7 @@ endmodule
 // IRD updated on T1, while ncode still executing. To avoid using the next IRD,
 // decoded signals must be registered on T3, or T4 before using them.
 //
-module irdDecode( input [15:0] ird, output Irdecod_isPcRel,
+module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod_ftuConst,
 			output Irdecod_isTas, output Irdecod_implicitSp, output [2:0] Irdecod_rx, output [2:0] Irdecod_ry, 
 			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
@@ -1107,7 +1106,7 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel,
 		default:			ftuConst = '0;
 		endcase	
 	end	
-	assign Irdecod.ftuConst = ftuConst;
+	assign Irdecod_ftuConst = ftuConst;
 	
 	//
 	// TRAP Vector # for group 2 exceptions
