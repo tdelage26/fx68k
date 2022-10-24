@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic isRmc;
 	logic noLowByte, noHighByte;
 	
 	logic updTpend, clrTpend;
@@ -155,7 +154,7 @@ module fx68k(
 	wire [15:0] Irdecod_ftuConst;
 	wire [5:0] Irdecod_macroTvn;
 
-	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte;
+	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc;
 
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
@@ -346,14 +345,14 @@ module fx68k(
 		.alue, .ccr);
 
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
-		.Nanod_busByte);
+		.Nanod_busByte, .Nanod_isRmc);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
 		.Irdecod_macroTvn, .Irdecod_inhibitCcr);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod_permStart), .permStop( Nanod_waitBusFinish), .iStop,
-		.aob0, .isWrite( Nanod_isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
+		.aob0, .isWrite( Nanod_isWrite), .isRmc( Nanod_isRmc), .isByte( busIsByte), .busAvail,
 		.bciWrite, .addrOe, .bgBlock, .waitBusCycle, .busStarting, .busAddrErr,
 		.rDtack, .BeDebounced, .Vpai,
 		.ASn, .LDSn, .UDSn, .eRWn);
@@ -644,7 +643,7 @@ endmodule
 module nDecoder3( input Clks_clk,
 	input Irdecod_isPcRel,
 	input Irdecod_isTas,
-	output Nanod_permStart,Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte,
+	output Nanod_permStart,Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc,
 	output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
@@ -913,7 +912,7 @@ localparam NANO_FTU_CONST = 1;
 		// Originally isTas only delayed on T2 (and seems only a late mask rev fix)
 		// Better latch the combination on T4
 		if( enT4)
-			Nanod.isRmc <= Irdecod_isTas & nanoLatch[ NANO_BUSBYTE];
+			Nanod_isRmc <= Irdecod_isTas & nanoLatch[ NANO_BUSBYTE];
 	end
 			
 	
