@@ -43,11 +43,6 @@ localparam NANO_DOB_DBD = 2'b01;
 localparam NANO_DOB_ADB = 2'b10;
 localparam NANO_DOB_ALU = 2'b11;
 
-// IRD decoded signals
-typedef struct {
-	logic inhibitCcr;
-} s_irdecod;
-
 // Nano code decoded signals
 typedef struct {
 	logic permStart;
@@ -157,7 +152,7 @@ module fx68k(
 	
 	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp, Irdecod_toCcr;
 	wire Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr;
-	wire Irdecod_isByte, Irdecod_isMovep; 
+	wire Irdecod_isByte, Irdecod_isMovep, Irdecod_inhibitCcr; 
 	reg Irdecod_rxIsAreg, Irdecod_ryIsAreg;
 	wire [2:0] Irdecod_rx;
 	wire [2:0] Irdecod_ry;
@@ -282,10 +277,7 @@ module fx68k(
 
 	// Decoded nanocode signals
 	s_nanod Nanod;
-	// IRD decoded control signals
-	s_irdecod Irdecod;
 
-	//	
 	reg Tpend;
 	reg intPend;											// Interrupt pending
 	reg pswT, pswS;
@@ -348,18 +340,18 @@ module fx68k(
 		.nma, .a1, .a2, .a3, .tvn,
 		.psw, .prenEmpty, .au05z, .dcr4, .ze, .alue01( alue[1:0]), .i11( Irc[ 11]) );
 
-	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
+	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .Nanod, .enT1, .enT2, .enT3, .enT4,
 		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
 		.Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
-	nDecoder3 nDecoder( .Clks_clk, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
+	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas);
 	
-	irdDecode irdDecode( .ird( Ird), .Irdecod, .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
+	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
-		.Irdecod_macroTvn);
+		.Irdecod_macroTvn, .Irdecod_inhibitCcr);
 	
 	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
 		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
@@ -653,7 +645,7 @@ endmodule
 module nDecoder3( input Clks_clk,
 	input Irdecod_isPcRel,
 	input Irdecod_isTas,
-	input s_irdecod Irdecod, output s_nanod Nanod,
+	output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
 	input [NANO_WIDTH-1:0] nanoLatch);
@@ -935,10 +927,9 @@ endmodule
 //
 module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod_ftuConst, output [5:0]Irdecod_macroTvn,
 			output Irdecod_isTas, output Irdecod_implicitSp, output [2:0] Irdecod_rx, output [2:0] Irdecod_ry, 
-			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep,
+			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep, output Irdecod_inhibitCcr,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
-			output Irdecod_rxIsAreg, Irdecod_ryIsAreg,
-			output s_irdecod Irdecod);
+			output Irdecod_rxIsAreg, Irdecod_ryIsAreg);
 
 	wire [3:0] line = ird[15:12];
 	logic [15:0] lineOnehot;
@@ -1133,7 +1124,7 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 	// Opcodes variants that don't affect flags
 	// ADDA/SUBA ADDQ/SUBQ MOVEA
 
-	assign Irdecod.inhibitCcr =
+	assign Irdecod_inhibitCcr =
 		( (lineOnehot[9] | lineOnehot['hd]) & size11) |				// ADDA/SUBA
 		( lineOnehot[5] & eaAdir) |									// ADDQ/SUBQ to An (originally checks for line[4] as well !?)
 		( (lineOnehot[2] | lineOnehot[3]) & ird[8:6] == 3'b001);	// MOVEA
@@ -1152,7 +1143,7 @@ endmodule
 module excUnit( input Clks_clk, input Clks_extReset, 
 	input Clks_pwrUp, input Clks_enPhi2, 
 	input enT1, enT2, enT3, enT4,
-	input s_nanod Nanod, input s_irdecod Irdecod,
+	input s_nanod Nanod,
 	input Irdecod_implicitSp, Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr,
 	input Irdecod_isByte, Irdecod_rxIsAreg, Irdecod_ryIsAreg,
 	input [2:0] Irdecod_rx, Irdecod_ry,
@@ -1682,7 +1673,7 @@ localparam REG_DT = 17;
 		endcase
 	end
 
-	dataIo dataIo( .Clks_clk, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4, .Nanod, .Irdecod,
+	dataIo dataIo( .Clks_clk, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4, .Nanod,
 			.iEdb, .dobIdle, .dobInput, .aob0, .Irdecod_isByte,
 			.Irc, .dbin, .oEdb);
 
@@ -1709,7 +1700,7 @@ endmodule
 
 module dataIo( input Clks_clk, input Clks_enPhi2,
 	input enT1, enT2, enT3, enT4, Irdecod_isByte,
-	input s_nanod Nanod, input s_irdecod Irdecod,
+	input s_nanod Nanod,
 	input [15:0] iEdb,
 	input aob0,
 
