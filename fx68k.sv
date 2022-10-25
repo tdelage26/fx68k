@@ -43,8 +43,6 @@ localparam NANO_DOB_DBD = 2'b01;
 localparam NANO_DOB_ADB = 2'b10;
 localparam NANO_DOB_ALU = 2'b11;
 
-// Nano code decoded signals
-
 module fx68k(
 	input clk,
 	input HALTn,					// Used for single step only. Force high if not used
