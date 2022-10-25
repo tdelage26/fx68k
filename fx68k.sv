@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic todbin, toIrc;
 	logic dbl2Atl, abl2Atl, atl2Abl, atl2Dbl;
 	logic abh2Ath, dbh2Ath;
 	logic ath2Dbh, ath2Abh;
@@ -142,6 +141,7 @@ module fx68k(
 	wire Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl;
 	wire Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr;
 	wire Nanod_pswIToFtu, Nanod_initST, Nanod_ird2Ftu, Nanod_ssw2Ftu, Nanod_Ir2Ird, Nanod_auClkEn, Nanod_noSpAlign;
+	wire Nanod_todbin, Nanod_toIrc;
 	wire [2:0] Nanod_auCntrl;
 	wire [1:0] Nanod_dobCtrl;
 	wire [2:0] Nanod_aluColumn;
@@ -332,7 +332,7 @@ module fx68k(
 		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
 		.Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Nanod_busByte, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_ftu2Dbl,
 		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr, .Nanod_auCntrl, .Nanod_dobCtrl, .Nanod_aluColumn, .Nanod_aluDctrl,
-		.Nanod_auClkEn, .Nanod_noSpAlign,
+		.Nanod_auClkEn, .Nanod_noSpAlign, .Nanod_todbin, .Nanod_toIrc,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
@@ -340,7 +340,7 @@ module fx68k(
 	nDecoder3 nDecoder( .Clks_clk, .Nanod, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
 		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend, .Nanod_tvn2Ftu, .Nanod_const2Ftu, .Nanod_ftu2Dbl, .Nanod_ftu2Abl,
 		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu, .Nanod_ftu2Ccr, .Nanod_pswIToFtu, .Nanod_initST, .Nanod_auCntrl, .Nanod_dobCtrl,
-		.Nanod_aluColumn, .Nanod_aluDctrl, .Nanod_ird2Ftu, .Nanod_ssw2Ftu, .Nanod_Ir2Ird, .Nanod_auClkEn, .Nanod_noSpAlign);
+		.Nanod_aluColumn, .Nanod_aluDctrl, .Nanod_ird2Ftu, .Nanod_ssw2Ftu, .Nanod_Ir2Ird, .Nanod_auClkEn, .Nanod_noSpAlign, .Nanod_todbin, .Nanod_toIrc);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
@@ -642,6 +642,7 @@ module nDecoder3( input Clks_clk,
 	output Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl,
 	output Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr,
 	output Nanod_pswIToFtu, Nanod_initST, Nanod_ird2Ftu, Nanod_ssw2Ftu, Nanod_Ir2Ird, Nanod_auClkEn, Nanod_noSpAlign,
+	output Nanod_todbin, Nanod_toIrc,
 	output s_nanod Nanod,
 	output [2:0] Nanod_auCntrl,
 	output [1:0] Nanod_dobCtrl,
@@ -736,8 +737,8 @@ localparam NANO_FTU_CONST = 1;
 			Nanod_noSpAlign <= (nanoLatch[ NANO_NO_SP_ALGN + 1:NANO_NO_SP_ALGN] == 2'b11);			
 			Nanod.extDbh <= nanoLatch[ NANO_EXT_DBH];
 			Nanod.extAbh <= nanoLatch[ NANO_EXT_ABH];
-			Nanod.todbin <= nanoLatch[ NANO_TODBIN];
-			Nanod.toIrc <=  nanoLatch[ NANO_TOIRC];
+			Nanod_todbin <= nanoLatch[ NANO_TODBIN];
+			Nanod_toIrc <=  nanoLatch[ NANO_TOIRC];
 			
 			// ablAbd is disabled on byte transfers (adbhCharge plus irdIsByte). Not sure the combination makes much sense.
 			// It happens in a few cases but I don't see anything enabled on abL (or abH) section anyway.
@@ -1147,7 +1148,7 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	input s_nanod Nanod,
 	input Irdecod_implicitSp, Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr,
 	input Irdecod_isByte, Irdecod_rxIsAreg, Irdecod_ryIsAreg, Nanod_busByte, Nanod_noLowByte, Nanod_noHighByte, Nanod_ftu2Dbl,
-	input Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_ftu2Ccr, Nanod_auClkEn, Nanod_noSpAlign,
+	input Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_ftu2Ccr, Nanod_auClkEn, Nanod_noSpAlign, Nanod_todbin, Nanod_toIrc,
 	input [2:0] Irdecod_rx, Irdecod_ry,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
 	input pswS,
@@ -1681,7 +1682,8 @@ localparam REG_DT = 17;
 
 	dataIo dataIo( .Clks_clk, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4, .Nanod,
 			.iEdb, .dobIdle, .dobInput, .aob0, .Irdecod_isByte, .Nanod_busByte,
-			.Nanod_noLowByte, .Nanod_noHighByte, .Irc, .dbin, .oEdb);
+			.Nanod_noLowByte, .Nanod_noHighByte, .Irc, .dbin, .oEdb, .Nanod_todbin,
+			.Nanod_toIrc);
 
 	fx68kAlu alu(
 		.clk( Clks_clk), .pwrUp( Clks_pwrUp), .enT1, .enT3, .enT4,
@@ -1706,7 +1708,7 @@ endmodule
 
 module dataIo( input Clks_clk, input Clks_enPhi2,
 	input enT1, enT2, enT3, enT4, Irdecod_isByte, Nanod_busByte, Nanod_noLowByte,
-	Nanod_noHighByte,
+	input Nanod_noHighByte, Nanod_todbin, Nanod_toIrc,
 	input s_nanod Nanod,
 	input [15:0] iEdb,
 	input aob0,
@@ -1753,8 +1755,8 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 			xToIrc <= 1'b0;			
 		end
 		else if( enT3) begin
-			xToDbin <= Nanod.todbin;
-			xToIrc <= Nanod.toIrc;
+			xToDbin <= Nanod_todbin;
+			xToIrc <= Nanod_toIrc;
 		end
 
 		// Capture on T4 of the next ucycle
