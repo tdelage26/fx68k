@@ -45,7 +45,6 @@ localparam NANO_DOB_ALU = 2'b11;
 
 // Nano code decoded signals
 typedef struct {
-	logic au2Db, au2Ab, au2Pc;
 	logic dbin2Abd, dbin2Dbd;
 	logic extDbh, extAbh;
 	logic ablAbd, ablAbh;
@@ -115,6 +114,7 @@ module fx68k(
 	wire Nanod_reg2abl, Nanod_reg2abh, Nanod_dbh2reg, Nanod_dbl2reg, Nanod_reg2dbl, Nanod_reg2dbh;
 	wire Nanod_atl2Abl, Nanod_abl2Atl, Nanod_atl2Dbl, Nanod_ssp, Nanod_rxlDbl, Nanod_aluFinish;
 	wire Nanod_pchdbh, Nanod_pcldbl, Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit;
+	wire Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc;
 	reg Nanod_rxh2dbh, Nanod_rxh2abh, Nanod_dbl2rxl, Nanod_dbh2rxh, Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl;
 	reg Nanod_abh2rxh, Nanod_dbh2ryh, Nanod_abh2ryh, Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh;
 	reg Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_abd2Dcr, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd;
@@ -315,7 +315,7 @@ module fx68k(
 		.Nanod_rxh2dbh, .Nanod_rxh2abh, .Nanod_dbl2rxl, .Nanod_dbh2rxh, .Nanod_rxl2db, .Nanod_rxl2ab, .Nanod_abl2rxl, .Nanod_abh2rxh, .Nanod_dbh2ryh,
 		.Nanod_abh2ryh, .Nanod_ryl2db, .Nanod_ryl2ab, .Nanod_ryh2dbh, .Nanod_ryh2abh, .Nanod_dbl2ryl, .Nanod_abl2ryl, .Nanod_pchdbh, .Nanod_pcldbl,
 		.Nanod_pclabl, .Nanod_pchabh, .Nanod_rz, .Nanod_aluActrl, .Nanod_aluInit, .Nanod_aluFinish, .Nanod_abd2Dcr, .Nanod_dcr2Dbd, .Nanod_dbd2Alue,
-		.Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd,
+		.Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd, .Nanod_au2Db, .Nanod_au2Ab, .Nanod_au2Pc,
 		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
@@ -328,7 +328,8 @@ module fx68k(
 		.Nanod_reg2abl, .Nanod_reg2abh, .Nanod_dbh2reg, .Nanod_dbl2reg, .Nanod_reg2dbl, .Nanod_reg2dbh, .Nanod_abl2Atl, .Nanod_atl2Abl, .Nanod_atl2Dbl, .Nanod_ssp, .Nanod_rxlDbl,
 		.Nanod_rxh2dbh, .Nanod_rxh2abh, .Nanod_dbl2rxl, .Nanod_dbh2rxh, .Nanod_rxl2db, .Nanod_rxl2ab, .Nanod_abl2rxl, .Nanod_abh2rxh, .Nanod_dbh2ryh, .Nanod_abh2ryh, .Nanod_ryl2db,
 		.Nanod_ryl2ab, .Nanod_ryh2dbh, .Nanod_ryh2abh, .Nanod_dbl2ryl, .Nanod_abl2ryl, .Nanod_pchdbh, .Nanod_pcldbl, .Nanod_pclabl, .Nanod_pchabh, .Nanod_rz, .Nanod_aluActrl,
-		.Nanod_aluInit, .Nanod_aluFinish, .Nanod_abd2Dcr, .Nanod_dcr2Dbd, .Nanod_dbd2Alue, .Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd);
+		.Nanod_aluInit, .Nanod_aluFinish, .Nanod_abd2Dcr, .Nanod_dcr2Dbd, .Nanod_dbd2Alue, .Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd,
+		.Nanod_au2Db, .Nanod_au2Ab, .Nanod_au2Pc);
 	
 	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
 		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
@@ -638,7 +639,7 @@ module nDecoder3( input Clks_clk,
 	output Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh, Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_pchdbh,
 	output Nanod_pcldbl, Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit, Nanod_aluFinish,
 	output Nanod_abd2Dcr, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, 
-	output Nanod_alu2Dbd, Nanod_alu2Abd,
+	output Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc,
 	output s_nanod Nanod,
 	output [2:0] Nanod_auCntrl,
 	output [1:0] Nanod_dobCtrl,
@@ -812,9 +813,9 @@ localparam NANO_FTU_CONST = 1;
 	assign Nanod.abdIsByte = nanoLatch[ NANO_ABDHRECHARGE];
 	
 	// Not being latched on T4 creates non unique case warning!
-	assign Nanod.au2Db = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b01);
-	assign Nanod.au2Ab = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b10);
-	assign Nanod.au2Pc = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b11);
+	assign Nanod_au2Db = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b01);
+	assign Nanod_au2Ab = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b10);
+	assign Nanod_au2Pc = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b11);
 	
 	assign Nanod_db2Aob = (aobCtrl == 2'b10);
 	assign Nanod_ab2Aob = (aobCtrl == 2'b01);
@@ -1151,7 +1152,8 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	input Nanod_dbl2rxl, Nanod_dbh2rxh, Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl, Nanod_abh2rxh, Nanod_dbh2ryh, Nanod_abh2ryh,
 	input Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh, Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_pchdbh, Nanod_pcldbl,
 	input Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit, Nanod_aluFinish, Nanod_abd2Dcr, Nanod_dcr2Dbd,
-	input Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_alu2Dbd, Nanod_alu2Abd,
+	input Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_au2Db, Nanod_au2Ab,
+	input Nanod_au2Pc,
 	input [2:0] Irdecod_rx, Irdecod_ry,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
 	input pswS,
@@ -1351,7 +1353,7 @@ localparam REG_DT = 17;
 		rxl2Dbl:				dblMux = regs68L[ actualRx];
 		ryl2Dbl:				dblMux = regs68L[ actualRy];
 		Nanod_ftu2Dbl:			dblMux = ftu;
-		Nanod.au2Db:			dblMux = auReg[15:0];
+		Nanod_au2Db:			dblMux = auReg[15:0];
 		Nanod_atl2Dbl:			dblMux = Atl;
 		Pcl2Dbl:				dblMux = PcL;
 		default: begin			dblMux = 'X;	dblIdle = 1'b1;				end
@@ -1360,7 +1362,7 @@ localparam REG_DT = 17;
 		unique case( 1'b1)
 		Nanod_rxh2dbh:			dbhMux = regs68H[ actualRx];
 		Nanod_ryh2dbh:			dbhMux = regs68H[ actualRy];
-		Nanod.au2Db:			dbhMux = auReg[31:16];
+		Nanod_au2Db:			dbhMux = auReg[31:16];
 		Nanod_ath2Dbh:			dbhMux = Ath;
 		Pch2Dbh:				dbhMux = PcH;
 		default: begin			dbhMux = 'X;	dbhIdle = 1'b1;				end
@@ -1379,7 +1381,7 @@ localparam REG_DT = 17;
 		rxl2Abl:				ablMux = regs68L[ actualRx];
 		ryl2Abl:				ablMux = regs68L[ actualRy];
 		Nanod_ftu2Abl:			ablMux = ftu;
-		Nanod.au2Ab:			ablMux = auReg[15:0];
+		Nanod_au2Ab:			ablMux = auReg[15:0];
 		Nanod_aob2Ab:			ablMux = aob[15:0];
 		Nanod_atl2Abl:			ablMux = Atl;
 		default: begin			ablMux = 'X;	ablIdle = 1'b1;				end
@@ -1389,7 +1391,7 @@ localparam REG_DT = 17;
 		Pch2Abh:				abhMux = PcH;
 		Nanod_rxh2abh:			abhMux = regs68H[ actualRx];
 		Nanod_ryh2abh:			abhMux = regs68H[ actualRy];
-		Nanod.au2Ab:			abhMux = auReg[31:16];
+		Nanod_au2Ab:			abhMux = auReg[31:16];
 		Nanod_aob2Ab:			abhMux = aob[31:16];
 		Nanod_ath2Abh:			abhMux = Ath;
 		default: begin			abhMux = 'X;	abhIdle = 1'b1;				end
@@ -1462,7 +1464,7 @@ localparam REG_DT = 17;
 
 	// We need to take directly from first level muxes that are updated and T1
 			
-	wire au2Aob = Nanod_au2Aob | (Nanod.au2Db & Nanod_db2Aob);
+	wire au2Aob = Nanod_au2Aob | (Nanod_au2Db & Nanod_db2Aob);
 	
 	always_ff @( posedge Clks_clk) begin
 		// UNIQUE IF !
@@ -1581,7 +1583,7 @@ localparam REG_DT = 17;
 		end
 		
 		// Unique IF !!!
-		if( enT1 & Nanod.au2Pc)
+		if( enT1 & Nanod_au2Pc)
 			PcL <= auReg[15:0];
 		else if( enT3) begin
 			if( dbl2Pcl)
@@ -1591,7 +1593,7 @@ localparam REG_DT = 17;
 		end
 			
 		// Unique IF !!!
-		if( enT1 & Nanod.au2Pc)
+		if( enT1 & Nanod_au2Pc)
 			PcH <= auReg[31:16];
 		else if( enT3) begin
 			if( dbh2Pch)
