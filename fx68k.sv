@@ -88,8 +88,8 @@ module fx68k(
 	
 	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp, Irdecod_toCcr;
 	wire Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr;
-	wire Irdecod_isByte, Irdecod_isMovep, Irdecod_inhibitCcr; 
-	reg Irdecod_rxIsAreg, Irdecod_ryIsAreg;
+	wire Irdecod_isByte, Irdecod_isMovep, Irdecod_inhibitCcr, Irdecod_rxIsAreg; 
+	reg Irdecod_ryIsAreg;
 	wire [2:0] Irdecod_rx;
 	wire [2:0] Irdecod_ry;
 	wire [15:0] Irdecod_ftuConst;
@@ -920,7 +920,7 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 			output Irdecod_isTas, output Irdecod_implicitSp, output [2:0] Irdecod_rx, output [2:0] Irdecod_ry, 
 			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep, output Irdecod_inhibitCcr,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
-			output Irdecod_rxIsAreg, Irdecod_ryIsAreg);
+			output Irdecod_ryIsAreg, output reg Irdecod_rxIsAreg);
 
 	wire [3:0] line = ird[15:12];
 	logic [15:0] lineOnehot;
