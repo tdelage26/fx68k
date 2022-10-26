@@ -120,7 +120,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	logic shftCin, shftRight, addCin;
 	
 	// Register some decoded signals	
-	always_ff @( posedge clk) begin
+	always @( posedge clk) begin
 		if( enT3) begin
 			row <= cRow;
 			isArX <= cIsArX;
@@ -140,7 +140,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	end
 	
 	
-	always_comb begin
+	always @* begin
 		// Dest (addr) operand source
 		// If aluCsr (depends on column/row) addrbus is shifted !!
 		aOperand = (aluAddrCtrl ? alub : iAddrBus);
@@ -175,7 +175,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	// BCD adjust is among the slowest processing on ALU !
 	// Precompute and register BCD result on T1
 	// We don't need to wait for execution buses because corf is always added to ALU previous result
-	always_ff @( posedge clk)
+	always @( posedge clk)
 		if( enT1) begin
 			bcdLatch <= bcdResult;
 			bcdCarry <= bcdC;
@@ -183,8 +183,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 		end
 		
 	// Adder carry in selector
-	always_comb
-	begin
+	always @* begin
 		case( oper)
 			OP_ADD, OP_SUB:   addCin = 1'b0;
 			OP_SUB0:          addCin = 1'b1;			// NOT = 0 - op - 1
@@ -195,7 +194,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	end
    	
 	// Shifter carry in and direction selector
-	always_comb begin
+	always @* begin
 		case( oper)
 		OP_LSL, OP_ASL, OP_ROL, OP_ROXL, OP_SLAA:   shftRight = 1'b0;
 		OP_LSR, OP_ASR, OP_ROR, OP_ROXR:            shftRight = 1'b1;
@@ -222,7 +221,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	end
 	
 	// ALU operation selector
-	always_comb begin	      
+	always @* begin	      
 
 		// sub is DATA - ADDR	    
 		mySubber( aOperand, dOperand, addCin,
@@ -302,7 +301,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	
 	
 	// CCR flags process
-	always_comb begin
+	always @* begin
 		
 		ccrTemp[XF] = pswCcr[XF];     ccrTemp[CF] = 0;     ccrTemp[VF] = 0;	
 
@@ -411,14 +410,14 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 	// Not described, but should be used also for instructions
 	//   that clear but not set Z (ADDX/SUBX/ABCD, etc)!
 	logic [4:0] ccrMasked;
-	always_comb begin
+	always @* begin
 		ccrMasked = (ccrTemp & ccrMask) | (pswCcr & ~ccrMask);
 		// if( finish | isCorf | isArX)		// No need to check specicially for isCorf as they always have the "finish" flag anyway
 		if( finish | isArX)
 			ccrMasked[ ZF] = ccrTemp[ ZF] & pswCcr[ ZF];
 	end
 		
-	always_ff @( posedge clk) begin
+	always @( posedge clk) begin
 		if( enT3) begin
 			// Update latches from ALU operators
 			if( (| aluColumn)) begin
@@ -463,7 +462,7 @@ module aluCorf( input [7:0] binResult, input bAdd, input cin, input hCarry,
 	wire lowC  = hCarry | (bAdd ? gt9( binResult[ 3:0]) : 1'b0);
 	wire highC = cin	| (bAdd ? (gt9( htemp[7:4]) | htemp[8]) : 1'b0);
 		
-	always_comb begin
+	always @* begin
 		if( bAdd) begin
 			htemp = { 1'b0, binResult} + (lowC  ? 4'h6 : 4'h0);
 			hNib  = htemp[8:4] + (highC ? 4'h6 : 4'h0);
@@ -498,7 +497,7 @@ module aluShifter( input [31:0] data,
 	logic [31:0] tdata;         
 
 	// size mux, put cin in position if dir == right
-	always_comb begin
+	always @* begin
 		tdata = data;
 		if( isByte & dir)
 			tdata[8] = cin;
@@ -506,7 +505,7 @@ module aluShifter( input [31:0] data,
 			tdata[16] = cin;
 	end
     
-	always_comb begin
+	always @* begin
 		// Reverse alu/alue position for MUL & DIV
 		// Result reversed again
 		if( swapWords & dir)
@@ -527,7 +526,7 @@ endmodule
 module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 	output logic [4:0] aluOp);
 	
-	always_comb begin
+	always @* begin
 		aluOp = 'X;
 		unique case( col)  
 		1:   aluOp = OP_AND;
@@ -631,7 +630,7 @@ module rowDecoder( input [15:0] ird,
 	wire eaAdir = (ird[ 5:3] == 3'b001);
 	wire size11 = ird[7] & ird[6];
 	
-	always_comb begin
+	always @* begin
 		case( ird[15:12])
 		'h4,
 		'h9,
@@ -642,7 +641,7 @@ module rowDecoder( input [15:0] ird,
 		endcase
 	end
 
-	always_comb begin
+	always @* begin
 		unique case( ird[15:12])
 
 		'h4:  begin
@@ -777,7 +776,7 @@ module ccrTable(
 
 	logic [MASK_NBITS-1:0] ccrMask1;
 
-	always_comb begin
+	always @* begin
 		unique case( col)
 		1:			ccrMask = ccrMask1;
 		
@@ -829,7 +828,7 @@ module ccrTable(
 	end
 
 	// Column 1 (AND)      
-	always_comb begin
+	always @* begin
 		if( finish)
 			ccrMask1 = row[7] ? KNZ00 : KNZKK;
 		else
