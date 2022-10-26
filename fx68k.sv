@@ -917,7 +917,7 @@ endmodule
 //
 module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod_ftuConst, output [5:0]Irdecod_macroTvn,
 			output Irdecod_isTas, output Irdecod_implicitSp, output [2:0] Irdecod_rx, output [2:0] Irdecod_ry, 
-			output Irdecod_toCcr, output Irdecod_rxIsDt, output Irdecod_isByte, output Irdecod_isMovep, output Irdecod_inhibitCcr,
+			output Irdecod_toCcr, output Irdecod_rxIsDt, output reg Irdecod_isByte, output Irdecod_isMovep, output Irdecod_inhibitCcr,
 			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
 			output reg Irdecod_rxIsAreg, Irdecod_ryIsAreg);
 
