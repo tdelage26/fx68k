@@ -110,7 +110,7 @@ module fx68k(
 	reg Nanod_dbh2ryh, Nanod_abh2ryh, Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh;
 	reg Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_abd2Dcr, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd;
 	reg Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_alu2Dbd, Nanod_alu2Abd;
-	reg Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh;
+	wire Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh;
 	wire [2:0] Nanod_auCntrl;
 	wire [1:0] Nanod_dobCtrl;
 	wire [2:0] Nanod_aluColumn;
@@ -629,9 +629,9 @@ module nDecoder3( input Clks_clk,
 	output Nanod_pcldbl, Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit, Nanod_aluFinish,
 	output Nanod_abd2Dcr, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, 
 	output Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc, Nanod_dbin2Abd, Nanod_dbin2Dbd,
-	output Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh, Nanod_abdIsByte,
+	output Nanod_abdIsByte,
 	output reg Nanod_rxh2dbh, Nanod_rxh2abh, Nanod_dbl2rxl, Nanod_abh2rxh, Nanod_dbh2rxh, Nanod_auClkEn, Nanod_noSpAlign,
-	output reg Nanod_extDbh, Nanod_extAbh, Nanod_todbin, Nanod_toIrc, Nanod_ablAbd,
+	output reg Nanod_extDbh, Nanod_extAbh, Nanod_todbin, Nanod_toIrc, Nanod_ablAbd, Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh,
 	output reg [2:0] Nanod_auCntrl,
 	output [1:0] Nanod_dobCtrl,
 	output [2:0] Nanod_aluColumn,
