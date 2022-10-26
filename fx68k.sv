@@ -108,9 +108,9 @@ module fx68k(
 	wire Nanod_rxh2dbh, Nanod_rxh2abh, Nanod_dbl2rxl, Nanod_abh2rxh, Nanod_dbh2rxh, Nanod_extDbh, Nanod_extAbh;
 	reg  Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl;
 	reg Nanod_dbh2ryh, Nanod_abh2ryh, Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh;
-	reg Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_abd2Dcr, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd;
-	reg Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_alu2Dbd, Nanod_alu2Abd;
-	wire Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh;
+	reg Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd;
+	reg Nanod_dbd2Alub, Nanod_abd2Alub;
+	wire Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh, Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_abd2Dcr;
 	wire [2:0] Nanod_auCntrl;
 	wire [1:0] Nanod_dobCtrl;
 	wire [2:0] Nanod_aluColumn;
@@ -626,13 +626,13 @@ module nDecoder3( input Clks_clk,
 	output Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl, Nanod_dbh2ryh, Nanod_abh2ryh,
 	output Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh, Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_pchdbh,
 	output Nanod_pcldbl, Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit, Nanod_aluFinish,
-	output Nanod_abd2Dcr, Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, 
-	output Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc, Nanod_dbin2Abd, Nanod_dbin2Dbd,
+	output Nanod_dcr2Dbd, Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, 
+	output Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc, Nanod_dbin2Abd, Nanod_dbin2Dbd,
 	output Nanod_abdIsByte,
 	output reg Nanod_rxh2dbh, Nanod_rxh2abh, Nanod_dbl2rxl, Nanod_abh2rxh, Nanod_dbh2rxh, Nanod_auClkEn, Nanod_noSpAlign,
 	output reg Nanod_extDbh, Nanod_extAbh, Nanod_todbin, Nanod_toIrc, Nanod_ablAbd, Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh,
 	output reg Nanod_dbl2Atl, Nanod_atl2Dbl, Nanod_abl2Atl, Nanod_atl2Abl, Nanod_aob2Ab, Nanod_abh2Ath, 
-	output reg Nanod_dbh2Ath, Nanod_ath2Dbh, Nanod_ath2Abh,
+	output reg Nanod_dbh2Ath, Nanod_ath2Dbh, Nanod_ath2Abh, Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_abd2Dcr,
 	output reg [2:0] Nanod_auCntrl,
 	output [1:0] Nanod_dobCtrl,
 	output [2:0] Nanod_aluColumn,
