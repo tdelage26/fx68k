@@ -280,8 +280,8 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 				cout = rtemp[8];
 			end
 			else begin
-				rtemp = bAdd ? { 8'd0, inpb } + { 8'd0, inpa} + { 15'd0, cin}:
-								{ 8'd0, inpb } - { 8'd0, inpa} - { 15'd0, cin};
+				rtemp = bAdd ? { 1'b0, inpb } + { 1'b0, inpa} + { 15'd0, cin}:
+								{ 1'b0, inpb } - { 1'b0, inpa} - { 15'd0, cin};
 				result = rtemp[ 15:0];
 				cout = rtemp[16];
 			end
