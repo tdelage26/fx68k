@@ -25,7 +25,7 @@ localparam UADDR_WIDTH = 4'd10;
 localparam UROM_WIDTH = 5'd17;
 localparam UROM_DEPTH = 11'd1024;
 
-localparam NADDR_WIDTH = 9;
+localparam NADDR_WIDTH = 4'd9;
 localparam NANO_WIDTH = 68;
 localparam NANO_DEPTH = 336;
 
@@ -204,8 +204,8 @@ module fx68k(
 
 		// Originally it's invalid on hardware reset, and forced later when coming out of reset
 		if( Clks_pwrUp) begin
-			microAddr <= RSTP0_NMA;
-			nanoAddr <= RSTP0_NMA;
+			microAddr <= {8'b0, RSTP0_NMA};
+			nanoAddr <= {7'b0, RSTP0_NMA};
 		end
 		else if( enT1) begin
 			microAddr <= nma;
