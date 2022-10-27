@@ -1970,11 +1970,11 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	always @* begin
 		if( A0Err) begin
 			if( a0Rst)					// Reset
-				nma = RSTP0_NMA;
+				nma = {8'b0, RSTP0_NMA};
 			else if( inGrp0Exc)			// Double fault
-				nma = HALT1_NMA;
+				nma = {8'b0, HALT1_NMA};
 			else						// Bus or address error
-				nma = BSER1_NMA;
+				nma = {8'b0, BSER1_NMA};
 		end
 		else
 			nma = uNma;
