@@ -1181,13 +1181,14 @@ localparam REG_DT = 17;
 		But the simulator doesn't realize (it can't) that the same value is substracting from itself,
 		and that the result should be zero even when it's 'X - 'X.
 	*/
-	
+`ifndef VERILATOR	
 	initial begin
 		for( int i = 0; i < 18; i++) begin
 			regs68L[i] <= '0;
 			regs68H[i] <= '0;
 		end
 	end
+`endif	
 	
 	// For simulation display only
 	wire [31:0] SSP = { regs68H[REG_SSP], regs68L[REG_SSP]};
@@ -1255,7 +1256,7 @@ localparam REG_DT = 17;
 		else if( Irdecod_rxIsDt & !Irdecod_implicitSp) begin
 			rxMux = REG_DT;
 			rxIsSp = 1'b0;
-			rxReg = 1'bX;
+			rxReg = 4'd0; // X in the original
 		end
 		else begin
 			if( Irdecod_implicitSp)
@@ -2305,7 +2306,15 @@ module busControl( input Clks_clk, input Clks_extReset,
 	// It's BERR and HALT and not address error, and not read-modify cycle.
 	wire busRetry = ~busAddrErr & 1'b0;
 	
-	enum int unsigned { SRESET = 0, SIDLE, S0, S2, S4, S6, SRMC_RES} busPhase, next;
+	// enum int unsigned { SRESET = 0, SIDLE, S0, S2, S4, S6, SRMC_RES} busPhase, next;
+	localparam [2:0] SRESET = 0, 
+					 SIDLE = 1, 
+					 S0 = 2, 
+					 S2 = 3, 
+					 S4 = 4, 
+					 S6 = 5, 
+					 SRMC_RES = 6;
+	reg [2:0] busPhase, next;
 
 	always @( posedge Clks_clk) begin
 		if( Clks_extReset)
