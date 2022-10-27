@@ -1838,7 +1838,7 @@ module uaddrDecode(
 		default:  eaDecode = 12;           // Invalid
 		endcase
          
-	default:   eaDecode = eaBits[5:3];      // Register based EAs
+	default:   eaDecode = {1'b0, eaBits[5:3]};      // Register based EAs
 	endcase
 	end
 	endfunction
@@ -2136,7 +2136,7 @@ module sequencer( input Clks_clk, input Clks_extReset,
 
 	// exception priority
 	always @* begin
-		grp1Nma = TRAC1_NMA;
+		grp1Nma = {1'b0, TRAC1_NMA};
 		if( rExcRst)
 			tvn = '0;							// Might need to change that to signal in exception
 		else if( rExcBusErr | rExcAdrErr)
@@ -2150,7 +2150,7 @@ module sequencer( input Clks_clk, input Clks_extReset,
 			tvn = 9;
 		else if( rInterrupt) begin
 			tvn = TVN_INTERRUPT;
-			grp1Nma = ITLX1_NMA;
+			grp1Nma = {1'b0, ITLX1_NMA};
 		end
 		else begin
 			case( 1'b1)					// Can't happen more than one of these

@@ -464,13 +464,13 @@ module aluCorf( input [7:0] binResult, input bAdd, input cin, input hCarry,
 		
 	always @* begin
 		if( bAdd) begin
-			htemp = { 1'b0, binResult} + (lowC  ? 4'h6 : 4'h0);
-			hNib  = htemp[8:4] + (highC ? 4'h6 : 4'h0);
+			htemp = { 1'b0, binResult} + (lowC  ? 9'h6 : 9'h0);
+			hNib  = htemp[8:4] + (highC ? 5'h6 : 5'h0);
 			ov = hNib[3] & ~binResult[7];
 		end
 		else begin
-			htemp = { 1'b0, binResult} - (lowC ? 4'h6 : 4'h0);
-			hNib  = htemp[8:4] - (highC ? 4'h6 : 4'h0);
+			htemp = { 1'b0, binResult} - (lowC ? 9'h6 : 9'h0);
+			hNib  = htemp[8:4] - (highC ? 5'h6 : 5'h0);
 			ov = ~hNib[3] & binResult[7];
 		end
 	end
