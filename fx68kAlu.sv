@@ -642,7 +642,7 @@ module rowDecoder( input [15:0] ird,
 	end
 
 	always @* begin
-		unique case( ird[15:12])
+		case( ird[15:12])
 
 		'h4:  begin
 				if( ird[8])
@@ -777,11 +777,11 @@ module ccrTable(
 	logic [MASK_NBITS-1:0] ccrMask1;
 
 	always @* begin
-		unique case( col)
-		1:			ccrMask = ccrMask1;
+		case( col)
+		1:				ccrMask = ccrMask1;
 		
 		2,3:
-			unique case( 1'b1)
+			case( 1'b1)
 			row[1]:		ccrMask = KNZ0C;		// DIV, used as 3n in col3
 			
 			row[3],								// ABCD
@@ -805,7 +805,7 @@ module ccrTable(
 			endcase			
 			
 		4:
-			unique case( row)
+			case( row)
 			// 1: DIV, only n (4n & 6n)
 			// 14: BCLR 4n
 			// 6,12,13,15	// not used
