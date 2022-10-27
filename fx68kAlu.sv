@@ -539,6 +539,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_SUB;
 					3: aluOp = OP_SUBC;
 					4,6: aluOp = OP_SLAA;
+					default:;
 					endcase
 				
 				row[2]:
@@ -546,6 +547,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_ADD;
 					3: aluOp = OP_ADDC;
 					4: aluOp = OP_ASR;
+					default:;
 					endcase
 
 				row[3]:
@@ -553,6 +555,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_ADDX;
 					3: aluOp = isCorf ? OP_ABCD : OP_ADD;
 					4: aluOp = OP_ASL;
+					default:;
 					endcase
                   
 				row[4]:
@@ -564,6 +567,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_SUB;
 					3: aluOp = OP_SUBC;
 					4: aluOp = OP_LSR;
+					default:;
 					endcase
 				
 				row[7]:					// MUL
@@ -571,6 +575,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_SUB;
 					3: aluOp = OP_ADD;
 					4: aluOp = OP_ROXR;
+					default:;
 					endcase
                
 				row[8]:
@@ -580,6 +585,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_EXT;
 					3: aluOp = OP_AND;
 					4: aluOp = OP_ROXR;
+					default:;
 					endcase
                
 				row[9]:
@@ -587,6 +593,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_SUBX;
 					3: aluOp = OP_SBCD;
 					4: aluOp = OP_ROL;
+					default:;
 					endcase
 
 				row[10]:
@@ -594,6 +601,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_SUBX;
 					3: aluOp = OP_SUBC;
 					4: aluOp = OP_ROR;
+					default:;
 					endcase
                 
 				row[11]:
@@ -601,6 +609,7 @@ module aluGetOp( input [15:0] row, input [2:0] col, input isCorf,
 					2: aluOp = OP_SUB0;
 					3: aluOp = OP_SUB0;
 					4: aluOp = OP_ROXL;
+					default:;
 					endcase
                 
 				row[12]:	aluOp = OP_ADDX;               

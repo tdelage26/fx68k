@@ -1246,12 +1246,12 @@ localparam REG_DT = 17;
 		if( Nanod_ssp) begin
 			rxMux = REG_SSP;
 			rxIsSp = 1'b1;
-			rxReg = 1'bX;
+			rxReg = 4'd0; // X in the original
 		end
 		else if( Irdecod_rxIsUsp) begin
 			rxMux = REG_USP;
 			rxIsSp = 1'b1;
-			rxReg = 1'bX;
+			rxReg = 4'd0; // X in the original
 		end
 		else if( Irdecod_rxIsDt & !Irdecod_implicitSp) begin
 			rxMux = REG_DT;
@@ -2140,7 +2140,7 @@ module sequencer( input Clks_clk, input Clks_extReset,
 		if( rExcRst)
 			tvn = '0;							// Might need to change that to signal in exception
 		else if( rExcBusErr | rExcAdrErr)
-			tvn = { 1'b1, rExcAdrErr};
+			tvn = { 3'b1, rExcAdrErr};
 			
 		// Seudo group 0 exceptions. Just for updating TVN
 		else if( rSpurious | rAutovec)
