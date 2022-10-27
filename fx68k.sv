@@ -32,8 +32,8 @@ localparam NANO_DEPTH = 336;
 localparam BSER1_NMA = 2'b11;
 localparam RSTP0_NMA = 2'b10;
 localparam HALT1_NMA = 2'b01;
-localparam TRAC1_NMA = 'h1C0;
-localparam ITLX1_NMA = 'h1C4;
+localparam TRAC1_NMA = 9'd448;
+localparam ITLX1_NMA = 9'd452;
 
 localparam TVN_SPURIOUS = 4'd12;
 localparam TVN_AUTOVEC = 4'd13;
