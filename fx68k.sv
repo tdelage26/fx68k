@@ -2200,7 +2200,6 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 				else
 					next = DIDLE;
 				end
-
 		D_BA:	begin							// Loop while only BGACK asserted, BG negated here
 				if( ~BRi & !bgBlock)
 					next = D3;
@@ -2209,10 +2208,8 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 				else
 					next = DIDLE;
 				end
-				
 		D1:		next = D_BR;							// Loop while only BR asserted
-		D_BR:	next = ~BRi & BgackI ? D_BR : D_BA;		// No direct path to IDLE !
-		
+		D_BR:	next = ~BRi & BgackI ? D_BR : D_BA;		// No direct path to IDLE !	
 		D3:		next = D_BRA;
 		D_BRA:	begin						// Loop while both BR and BGACK asserted
 				case( {BgackI, BRi} )
