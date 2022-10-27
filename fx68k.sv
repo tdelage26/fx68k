@@ -2185,8 +2185,18 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 		output busAvail,
 		output logic BGn);
 		
-	enum int unsigned { DRESET = 0, DIDLE, D1, D_BR, D_BA, D_BRA, D3, D2} dmaPhase, next;
+	reg [2:0] dmaPhase, next;
 
+	localparam [2:0]
+	DRESET = 0, 
+	DIDLE = 1, 
+	D1 = 2, 
+	D_BR = 3, 
+	D_BA = 4, 
+	D_BRA = 5, 
+	D3 = 6, 
+	D2 = 7;
+	
 	always @* begin
 		case(dmaPhase)
 		DRESET:	next = DIDLE;
