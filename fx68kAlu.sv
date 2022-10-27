@@ -397,7 +397,7 @@ module fx68kAlu ( input clk, pwrUp, enT1, enT3, enT4,
 				ccrTemp[ CF] = bcdCarry;
 				ccrTemp[ VF] = bcdOverf;
 			end
-		
+		default:;
 		endcase
 				
 	end
