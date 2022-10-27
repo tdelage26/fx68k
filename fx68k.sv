@@ -21,17 +21,17 @@
 
 localparam CF = 0, VF = 1, ZF = 2, NF = 3, XF = 4, SF = 13;
 
-localparam UADDR_WIDTH = 10;
-localparam UROM_WIDTH = 17;
-localparam UROM_DEPTH = 1024;
+localparam UADDR_WIDTH = 4'd10;
+localparam UROM_WIDTH = 5'd17;
+localparam UROM_DEPTH = 11'd1024;
 
 localparam NADDR_WIDTH = 9;
 localparam NANO_WIDTH = 68;
 localparam NANO_DEPTH = 336;
 
-localparam BSER1_NMA = 'h003;
-localparam RSTP0_NMA = 'h002;
-localparam HALT1_NMA = 'h001;
+localparam BSER1_NMA = 2'b11;
+localparam RSTP0_NMA = 2'b10;
+localparam HALT1_NMA = 2'b01;
 localparam TRAC1_NMA = 'h1C0;
 localparam ITLX1_NMA = 'h1C4;
 
