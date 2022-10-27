@@ -2413,7 +2413,7 @@ module busControl( input Clks_clk, input Clks_extReset,
 				rAS <= 1'b0;
 			else if( Clks_enPhi2 & (busPhase == SRMC_RES))		// Bus error on read phase of RMC. Deasserted one cycle later
 				rAS <= 1'b1;			
-			else if( Clks_enPhi2 & bcComplete & ~SRMC_RES)
+			else if( Clks_enPhi2 & bcComplete) // & ~SRMC_RES
 				if( ~isRmcReg)									// Keep AS asserted on the IDLE phase of RMC
 					rAS <= 1'b1;
 			
