@@ -11,7 +11,7 @@
 
 localparam MASK_NBITS = 5;
 
-localparam
+localparam [4:0]
 		OP_AND = 1,
 		OP_SUB = 2, OP_SUBX = 3, OP_ADD = 4,
 		OP_EXT = 5, OP_SBCD = 6, OP_SUB0 = 7,
