@@ -21,27 +21,117 @@
 
 localparam CF = 0, VF = 1, ZF = 2, NF = 3, XF = 4, SF = 13;
 
-localparam UADDR_WIDTH = 4'd10;
-localparam UROM_WIDTH = 5'd17;
-localparam UROM_DEPTH = 11'd1024;
+localparam UADDR_WIDTH = 10;
+localparam UROM_WIDTH = 17;
+localparam UROM_DEPTH = 1024;
 
-localparam NADDR_WIDTH = 4'd9;
+localparam NADDR_WIDTH = 9;
 localparam NANO_WIDTH = 68;
 localparam NANO_DEPTH = 336;
 
-localparam BSER1_NMA = 2'b11;
-localparam RSTP0_NMA = 2'b10;
-localparam HALT1_NMA = 2'b01;
-localparam TRAC1_NMA = 9'd448;
-localparam ITLX1_NMA = 9'd452;
+localparam BSER1_NMA = 'h003;
+localparam RSTP0_NMA = 'h002;
+localparam HALT1_NMA = 'h001;
+localparam TRAC1_NMA = 'h1C0;
+localparam ITLX1_NMA = 'h1C4;
 
-localparam TVN_SPURIOUS = 4'd12;
-localparam TVN_AUTOVEC = 4'd13;
-localparam TVN_INTERRUPT = 4'd15;
+localparam TVN_SPURIOUS = 12;
+localparam TVN_AUTOVEC = 13;
+localparam TVN_INTERRUPT = 15;
 
 localparam NANO_DOB_DBD = 2'b01;
 localparam NANO_DOB_ADB = 2'b10;
 localparam NANO_DOB_ALU = 2'b11;
+
+
+// Clocks, phases and resets
+typedef struct {
+	logic clk;
+	logic extReset;			// External sync reset on emulated system
+	logic pwrUp;			// Asserted together with reset on emulated system coldstart
+	logic enPhi1, enPhi2;	// Clock enables. Next cycle is PHI1 or PHI2
+} s_clks;
+
+// IRD decoded signals
+typedef struct {
+	logic isPcRel;
+	logic isTas;
+	logic implicitSp;
+	logic toCcr;
+	logic rxIsDt, ryIsDt;
+	logic rxIsUsp, rxIsMovem, movemPreDecr;
+	logic isByte;
+	logic isMovep;
+	logic [2:0] rx, ry;
+	logic rxIsAreg, ryIsAreg;
+	logic [15:0] ftuConst;
+	logic [5:0] macroTvn;
+	logic inhibitCcr;
+} s_irdecod;
+
+// Nano code decoded signals
+typedef struct {
+	logic permStart;
+	logic waitBusFinish;
+	logic isWrite;
+	logic busByte;
+	logic isRmc;
+	logic noLowByte, noHighByte;
+	
+	logic updTpend, clrTpend;
+	logic tvn2Ftu, const2Ftu;
+	logic ftu2Dbl, ftu2Abl;
+	logic abl2Pren, updPren;
+	logic inl2psw, ftu2Sr, sr2Ftu, ftu2Ccr, pswIToFtu;
+	logic ird2Ftu, ssw2Ftu;
+	logic initST;
+	logic Ir2Ird;
+	
+	logic auClkEn, noSpAlign;
+	logic [2:0] auCntrl;
+	logic todbin, toIrc;
+	logic dbl2Atl, abl2Atl, atl2Abl, atl2Dbl;
+	logic abh2Ath, dbh2Ath;
+	logic ath2Dbh, ath2Abh;
+	
+	logic db2Aob, ab2Aob, au2Aob;
+	logic aob2Ab, updSsw;
+	// logic adb2Dob, dbd2Dob, alu2Dob;
+	logic [1:0] dobCtrl;
+	
+	logic abh2reg, abl2reg;
+	logic reg2abl, reg2abh;
+	logic dbh2reg, dbl2reg;
+	logic reg2dbl, reg2dbh;
+	logic ssp, pchdbh, pcldbl, pclabl, pchabh;
+	
+	logic rxh2dbh, rxh2abh;
+	logic dbl2rxl, dbh2rxh;
+	logic rxl2db, rxl2ab;
+	logic abl2rxl, abh2rxh;
+	logic dbh2ryh, abh2ryh;
+	logic ryl2db, ryl2ab;
+	logic ryh2dbh, ryh2abh;
+	logic dbl2ryl, abl2ryl;
+	logic rz;
+	logic rxlDbl;
+	
+	logic [2:0] aluColumn;
+	logic [1:0] aluDctrl;
+	logic aluActrl;
+	logic aluInit, aluFinish;
+	logic abd2Dcr, dcr2Dbd;
+	logic dbd2Alue, alue2Dbd;
+	logic dbd2Alub, abd2Alub;
+	
+	logic alu2Dbd, alu2Abd;
+	logic au2Db, au2Ab, au2Pc;
+	logic dbin2Abd, dbin2Dbd;
+	logic extDbh, extAbh;
+	logic ablAbd, ablAbh;
+	logic dblDbd, dblDbh;
+	logic abdIsByte;
+} s_nanod;
 
 module fx68k(
 	input clk,
@@ -71,68 +161,37 @@ module fx68k(
 	input [15:0] iEdb, output [15:0] oEdb,
 	output [23:1] eab
 	);
-
-	// extReset: 		External sync reset on emulated system
-	// pwrUp:	 		Asserted together with reset on emulated system coldstart
-	// enPhi1, enPhi2:	Clock enables. Next cycle is PHI1 or PHI2
-
-	wire Clks_clk, Clks_extReset, Clks_pwrUp, Clks_enPhi1, Clks_enPhi2;
 	
-	assign Clks_clk = clk;	
-	assign Clks_extReset = extReset;
-	assign Clks_pwrUp = pwrUp;	
-	assign Clks_enPhi1 = enPhi1;
-	assign Clks_enPhi2 = enPhi2;
+	// wire clock = Clks.clk;
+	s_clks Clks;
+	
+	assign Clks.clk = clk;	
+	assign Clks.extReset = extReset;
+	assign Clks.pwrUp = pwrUp;	
+	assign Clks.enPhi1 = enPhi1;
+	assign Clks.enPhi2 = enPhi2;
 	
 	wire wClk;
 	
-	wire Irdecod_isPcRel, Irdecod_isTas, Irdecod_implicitSp, Irdecod_toCcr;
-	wire Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr;
-	wire Irdecod_isByte, Irdecod_isMovep, Irdecod_inhibitCcr, Irdecod_rxIsAreg, Irdecod_ryIsAreg; 
-	wire [2:0] Irdecod_rx;
-	wire [2:0] Irdecod_ry;
-	wire [15:0] Irdecod_ftuConst;
-	wire [5:0] Irdecod_macroTvn;
-
-	// wire Nanod_adb2Dob, Nanod_dbd2Dob, Nanod_alu2Dob;
-	wire Nanod_permStart, Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_isRmc, Nanod_noLowByte;
-	wire Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl;
-	wire Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr;
-	wire Nanod_pswIToFtu, Nanod_initST, Nanod_ird2Ftu, Nanod_ssw2Ftu, Nanod_Ir2Ird, Nanod_auClkEn, Nanod_noSpAlign;
-	wire Nanod_todbin, Nanod_toIrc, Nanod_abh2Ath, Nanod_dbh2Ath, Nanod_ath2Dbh, Nanod_ath2Abh, Nanod_dbl2Atl;
-	wire Nanod_db2Aob, Nanod_ab2Aob, Nanod_au2Aob, Nanod_aob2Ab, Nanod_updSsw, Nanod_abh2reg, Nanod_abl2reg;
-	wire Nanod_reg2abl, Nanod_reg2abh, Nanod_dbh2reg, Nanod_dbl2reg, Nanod_reg2dbl, Nanod_reg2dbh, Nanod_ryh2dbh;
-	wire Nanod_atl2Abl, Nanod_abl2Atl, Nanod_atl2Dbl, Nanod_ssp, Nanod_rxlDbl, Nanod_aluFinish, Nanod_ryl2ab;
-	wire Nanod_pchdbh, Nanod_pcldbl, Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit;
-	wire Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc, Nanod_dbin2Abd, Nanod_dbin2Dbd, Nanod_abdIsByte, Nanod_ablAbd;
-	wire Nanod_rxh2dbh, Nanod_rxh2abh, Nanod_dbl2rxl, Nanod_abh2rxh, Nanod_dbh2rxh, Nanod_extDbh, Nanod_extAbh;
-	wire Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh, Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_abd2Dcr, Nanod_ryh2abh;
-	wire Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dcr2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_ryl2db;
-	wire Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl, Nanod_dbh2ryh, Nanod_abh2ryh, Nanod_dbl2ryl, Nanod_abl2ryl;
-	wire [2:0] Nanod_auCntrl;
-	wire [1:0] Nanod_dobCtrl;
-	wire [2:0] Nanod_aluColumn;
-	wire [1:0] Nanod_aluDctrl;
-
 	// Internal sub clocks T1-T4
 	enum int unsigned { T0 = 0, T1, T2, T3, T4} tState;
-	wire enT1 = Clks_enPhi1 & (tState == T4) & ~wClk;
-	wire enT2 = Clks_enPhi2 & (tState == T1);
-	wire enT3 = Clks_enPhi1 & (tState == T2);
-	wire enT4 = Clks_enPhi2 & ((tState == T0) | (tState == T3));
+	wire enT1 = Clks.enPhi1 & (tState == T4) & ~wClk;
+	wire enT2 = Clks.enPhi2 & (tState == T1);
+	wire enT3 = Clks.enPhi1 & (tState == T2);
+	wire enT4 = Clks.enPhi2 & ((tState == T0) | (tState == T3));
 	
 	// T4 continues ticking during reset and group0 exception.
 	// We also need it to erase ucode output latched on T4.
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp)
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp)
 			tState <= T0;
 		else begin
 		case( tState)
-		T0: if( Clks_enPhi2) tState <= T4;
-		T1: if( Clks_enPhi2) tState <= T2;
-		T2: if( Clks_enPhi1) tState <= T3;
-		T3: if( Clks_enPhi2) tState <= T4;
-		T4: if( Clks_enPhi1) tState <= wClk ? T0 : T1;
+		T0: if( Clks.enPhi2) tState <= T4;
+		T1: if( Clks.enPhi2) tState <= T2;
+		T2: if( Clks.enPhi1) tState <= T3;
+		T3: if( Clks.enPhi2) tState <= T4;
+		T4: if( Clks.enPhi1) tState <= wClk ? T0 : T1;
 		endcase
 		end
 	end
@@ -152,12 +211,12 @@ module fx68k(
 	// reg rBR, rHALT;
 	wire BeDebounced = ~( BeI | BeiDelay);
 
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp) begin
 			rBerr <= 1'b0;
 			BeI <= 1'b0;
 		end
-		else if( Clks_enPhi2) begin
+		else if( Clks.enPhi2) begin
 			rDtack <= DTACKn;
 			rBerr <= BERRn;
 			rIpl <= ~{ IPL2n, IPL1n, IPL0n};
@@ -167,7 +226,7 @@ module fx68k(
 			// rBR <= BRn;
 			// rHALT <= HALTn;
 		end
-		else if( Clks_enPhi1) begin
+		else if( Clks.enPhi1) begin
 			Vpai <= VPAn;
 			BeI <= rBerr;
 			BeiDelay <= BeI;
@@ -195,24 +254,24 @@ module fx68k(
 	
 	// Output of these modules will be updated at T2 at the latest (depending on clock division)
 	
-	nanoRom nanoRom( .clk( Clks_clk), .nanoAddr, .nanoOutput);
-	uRom uRom( .clk( Clks_clk), .microAddr, .microOutput);
+	nanoRom nanoRom( .clk( Clks.clk), .nanoAddr, .nanoOutput);
+	uRom uRom( .clk( Clks.clk), .microAddr, .microOutput);
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		// uaddr originally latched on T1, except bits 6 & 7, the conditional bits, on T2
 		// Seems we can latch whole address at either T1 or T2
 
 		// Originally it's invalid on hardware reset, and forced later when coming out of reset
-		if( Clks_pwrUp) begin
-			microAddr <= {8'b0, RSTP0_NMA};
-			nanoAddr <= {7'b0, RSTP0_NMA};
+		if( Clks.pwrUp) begin
+			microAddr <= RSTP0_NMA;
+			nanoAddr <= RSTP0_NMA;
 		end
 		else if( enT1) begin
 			microAddr <= nma;
 			nanoAddr <= orgAddr;				// Register translated uaddr to naddr
 		end
 			
-		if( Clks_extReset) begin
+		if( Clks.extReset) begin
 			microLatch <= '0;
 			nanoLatch <= '0;
 		end
@@ -228,7 +287,14 @@ module fx68k(
 		end
 					
 	end
+	
 
+	// Decoded nanocode signals
+	s_nanod Nanod;
+	// IRD decoded control signals
+	s_irdecod Irdecod;
+
+	//	
 	reg Tpend;
 	reg intPend;											// Interrupt pending
 	reg pswT, pswS;
@@ -249,9 +315,9 @@ module fx68k(
 	
 
 	// IR & IRD forwarding
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT1) begin
-			if( Nanod_Ir2Ird)
+			if( Nanod.Ir2Ird)
 				Ird <= Ir;
 			else if(microLatch[0])		// prevented by IR => IRD !
 				Ir <= Irc;
@@ -266,7 +332,7 @@ module fx68k(
 	wire bgBlock, busAvail;
 	wire addrOe;
 
-	wire busIsByte = Nanod_busByte & (Irdecod_isByte | Irdecod_isMovep);
+	wire busIsByte = Nanod.busByte & (Irdecod.isByte | Irdecod.isMovep);
 	wire aob0;
 	
 	reg iStop;								// Internal signal for ending bus cycle
@@ -281,54 +347,32 @@ module fx68k(
 	wire enErrClk;
 
 	// Reset micro/nano latch after T4 of the current ublock.
-	assign rstUrom = Clks_enPhi1 & enErrClk;
+	assign rstUrom = Clks.enPhi1 & enErrClk;
 
 	uaddrDecode uaddrDecode( .opcode( Ir), .a1, .a2, .a3, .isPriv, .isIllegal, .isLineA, .isLineF, .lineBmap());
 
-	sequencer sequencer( .Clks_clk, .Clks_extReset, .enT3, .microLatch, .Ird,
+	sequencer sequencer( .Clks, .enT3, .microLatch, .Ird,
 		.A0Err, .excRst, .BerrA, .busAddrErr, .Spuria, .Avia,
 		.Tpend, .intPend, .isIllegal, .isPriv, .isLineA, .isLineF,
 		.nma, .a1, .a2, .a3, .tvn,
 		.psw, .prenEmpty, .au05z, .dcr4, .ze, .alue01( alue[1:0]), .i11( Irc[ 11]) );
 
-	excUnit excUnit( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4,
-		.Irdecod_implicitSp, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp, .Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte,
-		.Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Nanod_busByte, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_ftu2Dbl,
-		.Nanod_ftu2Abl, .Nanod_abl2Pren, .Nanod_updPren, .Nanod_ftu2Ccr, .Nanod_auCntrl, .Nanod_dobCtrl, .Nanod_aluColumn, .Nanod_aluDctrl,
-		.Nanod_auClkEn, .Nanod_noSpAlign, .Nanod_todbin, .Nanod_toIrc, .Nanod_abh2Ath, .Nanod_dbh2Ath, .Nanod_ath2Dbh, .Nanod_ath2Abh,
-		.Nanod_dbl2Atl, .Nanod_db2Aob, .Nanod_ab2Aob, .Nanod_au2Aob, .Nanod_aob2Ab, .Nanod_abh2reg, .Nanod_abl2reg, .Nanod_reg2abl, .Nanod_reg2abh,
-		.Nanod_dbh2reg, .Nanod_dbl2reg, .Nanod_reg2dbl, .Nanod_reg2dbh, .Nanod_abl2Atl, .Nanod_atl2Abl, .Nanod_atl2Dbl, .Nanod_ssp, .Nanod_rxlDbl, 
-		.Nanod_rxh2dbh, .Nanod_rxh2abh, .Nanod_dbl2rxl, .Nanod_dbh2rxh, .Nanod_rxl2db, .Nanod_rxl2ab, .Nanod_abl2rxl, .Nanod_abh2rxh, .Nanod_dbh2ryh,
-		.Nanod_abh2ryh, .Nanod_ryl2db, .Nanod_ryl2ab, .Nanod_ryh2dbh, .Nanod_ryh2abh, .Nanod_dbl2ryl, .Nanod_abl2ryl, .Nanod_pchdbh, .Nanod_pcldbl,
-		.Nanod_pclabl, .Nanod_pchabh, .Nanod_rz, .Nanod_aluActrl, .Nanod_aluInit, .Nanod_aluFinish, .Nanod_abd2Dcr, .Nanod_dcr2Dbd, .Nanod_dbd2Alue,
-		.Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd, .Nanod_au2Db, .Nanod_au2Ab, .Nanod_au2Pc, .Nanod_dbin2Abd,
-		.Nanod_dbin2Dbd, .Nanod_extDbh, .Nanod_ablAbd, .Nanod_ablAbh, .Nanod_extAbh, .Nanod_dblDbd, .Nanod_dblDbh, .Nanod_abdIsByte, .Ird, .ftu, .iEdb, .pswS,
+	excUnit excUnit( .Clks, .Nanod, .Irdecod, .enT1, .enT2, .enT3, .enT4,
+		.Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
 		.alue, .ccr);
 
-	nDecoder3 nDecoder( .Clks_clk, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
-		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend, .Nanod_tvn2Ftu, .Nanod_const2Ftu, .Nanod_ftu2Dbl, .Nanod_ftu2Abl,
-		.Nanod_abl2Pren, .Nanod_updPren, .Nanod_inl2psw, .Nanod_ftu2Sr, .Nanod_sr2Ftu, .Nanod_ftu2Ccr, .Nanod_pswIToFtu, .Nanod_initST, .Nanod_auCntrl, .Nanod_dobCtrl,
-		.Nanod_aluColumn, .Nanod_aluDctrl, .Nanod_ird2Ftu, .Nanod_ssw2Ftu, .Nanod_Ir2Ird, .Nanod_auClkEn, .Nanod_noSpAlign, .Nanod_todbin, .Nanod_toIrc, .Nanod_abh2Ath,
-		.Nanod_dbh2Ath, .Nanod_ath2Dbh, .Nanod_ath2Abh, .Nanod_dbl2Atl, .Nanod_db2Aob, .Nanod_ab2Aob, .Nanod_au2Aob, .Nanod_aob2Ab, .Nanod_updSsw, .Nanod_abh2reg, .Nanod_abl2reg,
-		.Nanod_reg2abl, .Nanod_reg2abh, .Nanod_dbh2reg, .Nanod_dbl2reg, .Nanod_reg2dbl, .Nanod_reg2dbh, .Nanod_abl2Atl, .Nanod_atl2Abl, .Nanod_atl2Dbl, .Nanod_ssp, .Nanod_rxlDbl,
-		.Nanod_rxh2dbh, .Nanod_rxh2abh, .Nanod_dbl2rxl, .Nanod_dbh2rxh, .Nanod_rxl2db, .Nanod_rxl2ab, .Nanod_abl2rxl, .Nanod_abh2rxh, .Nanod_dbh2ryh, .Nanod_abh2ryh, .Nanod_ryl2db,
-		.Nanod_ryl2ab, .Nanod_ryh2dbh, .Nanod_ryh2abh, .Nanod_dbl2ryl, .Nanod_abl2ryl, .Nanod_pchdbh, .Nanod_pcldbl, .Nanod_pclabl, .Nanod_pchabh, .Nanod_rz, .Nanod_aluActrl,
-		.Nanod_aluInit, .Nanod_aluFinish, .Nanod_abd2Dcr, .Nanod_dcr2Dbd, .Nanod_dbd2Alue, .Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd,
-		.Nanod_au2Db, .Nanod_au2Ab, .Nanod_au2Pc, .Nanod_dbin2Abd, .Nanod_dbin2Dbd, .Nanod_extDbh, .Nanod_extAbh, .Nanod_ablAbd, .Nanod_ablAbh, .Nanod_dblDbd, .Nanod_dblDbh, 
-		.Nanod_abdIsByte);
+	nDecoder3 nDecoder( .Clks, .Nanod, .Irdecod, .enT2, .enT4, .microLatch, .nanoLatch);
 	
-	irdDecode irdDecode( .ird( Ird), .Irdecod_isPcRel, .Irdecod_isTas, .Irdecod_implicitSp, .Irdecod_toCcr, .Irdecod_rxIsDt, .Irdecod_ryIsDt, .Irdecod_rxIsUsp,
-		.Irdecod_rxIsMovem, .Irdecod_movemPreDecr, .Irdecod_isByte, .Irdecod_isMovep, .Irdecod_rx, .Irdecod_ry, .Irdecod_rxIsAreg, .Irdecod_ryIsAreg, .Irdecod_ftuConst,
-		.Irdecod_macroTvn, .Irdecod_inhibitCcr);
+	irdDecode irdDecode( .ird( Ird), .Irdecod);
 	
-	busControl busControl( .Clks_clk, .Clks_extReset, .Clks_pwrUp, .Clks_enPhi1, .Clks_enPhi2, .enT1, .enT4, .permStart( Nanod_permStart), .permStop( Nanod_waitBusFinish), .iStop,
-		.aob0, .isWrite( Nanod_isWrite), .isRmc( Nanod_isRmc), .isByte( busIsByte), .busAvail,
+	busControl busControl( .Clks, .enT1, .enT4, .permStart( Nanod.permStart), .permStop( Nanod.waitBusFinish), .iStop,
+		.aob0, .isWrite( Nanod.isWrite), .isRmc( Nanod.isRmc), .isByte( busIsByte), .busAvail,
 		.bciWrite, .addrOe, .bgBlock, .waitBusCycle, .busStarting, .busAddrErr,
 		.rDtack, .BeDebounced, .Vpai,
 		.ASn, .LDSn, .UDSn, .eRWn);
 		
-	busArbiter busArbiter( .Clks_clk, .Clks_extReset, .Clks_enPhi1, .Clks_enPhi2, .BRi, .BgackI, .Halti, .bgBlock, .busAvail, .BGn);
+	busArbiter busArbiter( .Clks, .BRi, .BgackI, .Halti, .bgBlock, .busAvail, .BGn);
 		
 		
 	// Output reset & halt control
@@ -338,14 +382,14 @@ module fx68k(
 	assign oHALTEDn = !oHalted;
 	
 	// FC without permStart is special, either reset or halt
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp) begin
 			oReset <= 1'b0;
 			oHalted <= 1'b0;
 		end
 		else if( enT1) begin
-			oReset <= (uFc == 2'b01) & !Nanod_permStart;
-			oHalted <= (uFc == 2'b10) & !Nanod_permStart;
+			oReset <= (uFc == 2'b01) & !Nanod.permStart;
+			oHalted <= (uFc == 2'b10) & !Nanod.permStart;
 		end
 	end
 		
@@ -353,15 +397,15 @@ module fx68k(
 	assign { FC2, FC1, FC0} = rFC;					// ~rFC;
 	assign Iac = {rFC == 3'b111};					// & Control output enable !!
 
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset)
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset)
 			rFC <= '0;
-		else if( enT1 & Nanod_permStart) begin		// S0 phase of bus cycle
+		else if( enT1 & Nanod.permStart) begin		// S0 phase of bus cycle
 			rFC[2] <= pswS;
 			// If FC is type 'n' (0) at ucode, access type depends on PC relative mode		
 			// We don't care about RZ in this case. Those uinstructions with RZ don't start a bus cycle.
-			rFC[1] <= microLatch[ 16] | ( ~microLatch[ 15] & Irdecod_isPcRel);
-			rFC[0] <= microLatch[ 15] | ( ~microLatch[ 16] & ~Irdecod_isPcRel);
+			rFC[1] <= microLatch[ 16] | ( ~microLatch[ 15] & Irdecod.isPcRel);
+			rFC[0] <= microLatch[ 15] | ( ~microLatch[ 16] & ~Irdecod.isPcRel);
 		end
 	end
 	
@@ -375,13 +419,13 @@ module fx68k(
 	wire iplStable = (iIpl == rIpl);
 	wire iplComp = iIpl > pswI;
 
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset) begin
 			intPend <= 1'b0;
 			prevNmi <= 1'b0;
 		end
 		else begin
-			if( Clks_enPhi2)
+			if( Clks.enPhi2)
 				prevNmi <= nmi;
 				
 			// Originally async RS-Latch on PHI2, followed by a transparent latch on T2
@@ -391,7 +435,7 @@ module fx68k(
 			// Set on stable & NMI edge or compare
 			// Clear on: NMI Iack or (stable & !NMI & !Compare)
 
-			if( Clks_enPhi2) begin
+			if( Clks.enPhi2) begin
 				if( iplStable & ((nmi & ~prevNmi) | iplComp) )
 					intPend <= 1'b1;
 				else if( ((inl == 3'b111) & Iac) | (iplStable & !nmi & !iplComp) )
@@ -399,7 +443,7 @@ module fx68k(
 			end			
 		end
 		
-		if( Clks_extReset) begin
+		if( Clks.extReset) begin
 			inl <= '1;
 			updIll <= 1'b0;
 		end
@@ -431,17 +475,17 @@ module fx68k(
 	wire xVma = ~rVma & (eCntr == 8);
 	
 `ifdef USE_E_CLKEN
-	assign E_PosClkEn = (Clks_enPhi2 & (eCntr == 5));
-	assign E_NegClkEn = (Clks_enPhi2 & (eCntr == 9));
+	assign E_PosClkEn = (Clks.enPhi2 & (eCntr == 5));
+	assign E_NegClkEn = (Clks.enPhi2 & (eCntr == 9));
 `endif
 	
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp) begin
 			E <= 1'b0;
 			eCntr <='0;
 			rVma <= 1'b1;
 		end
-		if( Clks_enPhi2) begin
+		if( Clks.enPhi2) begin
 			if( eCntr == 9)
 				E <= 1'b0;
 			else if( eCntr == 5)
@@ -453,36 +497,36 @@ module fx68k(
 				eCntr <= eCntr + 1'b1;
 		end
 		
-		if( Clks_enPhi2 & addrOe & ~Vpai & (eCntr == 3))
+		if( Clks.enPhi2 & addrOe & ~Vpai & (eCntr == 3))
 			rVma <= 1'b0;
-		else if( Clks_enPhi1 & eCntr == '0)
+		else if( Clks.enPhi1 & eCntr == '0)
 			rVma <= 1'b1;
 	end
 		
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 	
 		// This timing is critical to stop the clock phases at the exact point on bus/addr error.
 		// Timing should be such that current ublock completes (up to T3 or T4).
 		// But T1 for the next ublock shouldn't happen. Next T1 only after resetting ucode and ncode latches.
 		
-		if( Clks_extReset)
+		if( Clks.extReset)
 			rAddrErr <= 1'b0;
-		else if( Clks_enPhi1) begin
+		else if( Clks.enPhi1) begin
 			if( busAddrErr & addrOe)		// Not on T1 ?!
 				rAddrErr <= 1'b1;
 			else if( ~addrOe)				// Actually async reset!
 				rAddrErr <= 1'b0;
 		end
 		
-		if( Clks_extReset)
+		if( Clks.extReset)
 			iBusErr <= 1'b0;
-		else if( Clks_enPhi1) begin
+		else if( Clks.enPhi1) begin
 			iBusErr <= ( BerrA & ~BeI & ~Iac & !BusRetry);
 		end
 
-		if( Clks_extReset)
+		if( Clks.extReset)
 			BerrA <= 1'b0;
-		else if( Clks_enPhi2) begin
+		else if( Clks.enPhi2) begin
 			if( ~BeI & ~Iac & addrOe)
 				BerrA <= 1'b1;
 			// else if( BeI & addrOe)			// Bad, async reset since addrOe raising edge
@@ -492,58 +536,58 @@ module fx68k(
 
 		// Signal reset exception to sequencer.
 		// Originally cleared on 1st T2 after permstart. Must keep it until TVN latched.
-		if( Clks_extReset)
+		if( Clks.extReset)
 			excRst <= 1'b1;
-		else if( enT2 & Nanod_permStart)
+		else if( enT2 & Nanod.permStart)
 			excRst <= 1'b0;
 		
-		if( Clks_extReset)
+		if( Clks.extReset)
 			A0Err <= 1'b1;								// A0 Reset
 		else if( enT3)									// Keep set until new urom words are being latched
 			A0Err <= 1'b0;
-		else if( Clks_enPhi1 & enErrClk & (busAddrErr | BerrA))		// Check bus error timing
+		else if( Clks.enPhi1 & enErrClk & (busAddrErr | BerrA))		// Check bus error timing
 			A0Err <= 1'b1;
 		
-		if( Clks_extReset) begin
+		if( Clks.extReset) begin
 			iStop <= 1'b0;
 			Err6591 <= 1'b0;
 		end
-		else if( Clks_enPhi1)
+		else if( Clks.enPhi1)
 			Err6591 <= enErrClk;
-		else if( Clks_enPhi2)
+		else if( Clks.enPhi2)
 			iStop <= xVma | (Vpai & (iAddrErr | ~rBerr));
 	end
 	
 	// PSW
 	logic irdToCcr_t4;
-	always @( posedge Clks_clk) begin				
-		if( Clks_pwrUp) begin
+	always_ff @( posedge Clks.clk) begin				
+		if( Clks.pwrUp) begin
 			Tpend <= 1'b0;
 			{pswT, pswS, pswI } <= '0;
 			irdToCcr_t4 <= '0;
 		end
 		
 		else if( enT4) begin
-			irdToCcr_t4 <= Irdecod_toCcr;
+			irdToCcr_t4 <= Irdecod.toCcr;
 		end
 		
 		else if( enT3) begin
 		
 			// UNIQUE IF !!	
-			if( Nanod_updTpend)
+			if( Nanod.updTpend)
 				Tpend <= pswT;
-			else if( Nanod_clrTpend)
+			else if( Nanod.clrTpend)
 				Tpend <= 1'b0;
 			
 			// UNIQUE IF !!	
-			if( Nanod_ftu2Sr & !irdToCcr_t4)
+			if( Nanod.ftu2Sr & !irdToCcr_t4)
 				{pswT, pswS, pswI } <= { ftu[ 15], ftu[13], ftu[10:8]};
 			else begin
-				if( Nanod_initST) begin
+				if( Nanod.initST) begin
 					pswS <= 1'b1;
 					pswT <= 1'b0;
 				end
-				if( Nanod_inl2psw)
+				if( Nanod.inl2psw)
 					pswI <= inl;
 			end
 				
@@ -560,39 +604,39 @@ module fx68k(
 	// Flagging group 0 exceptions from TVN might not work because some bus cycles happen before TVN is updated.
 	// But doesn't matter because a group 0 exception inside another one will halt the CPU anyway and won't save the SSW.
 		
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 	
 		// Updated at the start of the exception ucode
-		if( Nanod_updSsw & enT3) begin
+		if( Nanod.updSsw & enT3) begin
 			ssw <= { ~bciWrite, inExcept01, rFC};
 		end
 	
 		// Update TVN on T1 & IR=>IRD
-		if( enT1 & Nanod_Ir2Ird) begin
+		if( enT1 & Nanod.Ir2Ird) begin
 			tvnLatch <= tvn;
 			inExcept01 <= (tvn != 1);
 		end
 			
-		if( Clks_pwrUp)
+		if( Clks.pwrUp)
 			ftu <= '0;
 		else if( enT3) begin
-			case( 1'b1)
-			Nanod_tvn2Ftu:				ftu <= tvnMux;
+			unique case( 1'b1)
+			Nanod.tvn2Ftu:				ftu <= tvnMux;
 			
 			// 0 on unused bits seem to come from ftuConst PLA previously clearing FBUS
-			Nanod_sr2Ftu:				ftu <= {pswT, 1'b0, pswS, 2'b00, pswI, 3'b000, ccr[4:0] };
+			Nanod.sr2Ftu:				ftu <= {pswT, 1'b0, pswS, 2'b00, pswI, 3'b000, ccr[4:0] };
 			
-			Nanod_ird2Ftu:				ftu <= Ird;
-			Nanod_ssw2Ftu:				ftu[4:0] <= ssw;						// Undoc. Other bits must be preserved from IRD saved above!
-			Nanod_pswIToFtu:			ftu <= { 12'hFFF, pswI, 1'b0};			// Interrupt level shifted
-			Nanod_const2Ftu:			ftu <= Irdecod_ftuConst;
-			Nanod_abl2Pren:				ftu <= Abl;								// From ALU or datareg. Used for SR modify
+			Nanod.ird2Ftu:				ftu <= Ird;
+			Nanod.ssw2Ftu:				ftu[4:0] <= ssw;						// Undoc. Other bits must be preserved from IRD saved above!
+			Nanod.pswIToFtu:			ftu <= { 12'hFFF, pswI, 1'b0};			// Interrupt level shifted
+			Nanod.const2Ftu:			ftu <= Irdecod.ftuConst;
+			Nanod.abl2Pren:				ftu <= Abl;								// From ALU or datareg. Used for SR modify
 			default:					ftu <= ftu;
 			endcase
 		end
 	end
 	
-	always @* begin
+	always_comb begin
 		if( inExcept01) begin
 			// Unique IF !!!
 			if( tvnLatch == TVN_SPURIOUS)
@@ -605,36 +649,13 @@ module fx68k(
 				tvnMux = {10'b0, tvnLatch, 2'b00};
 		end
 		else
-			tvnMux = { 8'h0, Irdecod_macroTvn, 2'b00};
+			tvnMux = { 8'h0, Irdecod.macroTvn, 2'b00};
 	end
 				
 endmodule
 
 // Nanorom (plus) decoder for die nanocode
-module nDecoder3( input Clks_clk,
-	input Irdecod_isPcRel,
-	input Irdecod_isTas,
-	output Nanod_permStart,Nanod_waitBusFinish, Nanod_isWrite, Nanod_busByte, Nanod_noLowByte,
-	output Nanod_noHighByte, Nanod_updTpend, Nanod_clrTpend, Nanod_tvn2Ftu, Nanod_const2Ftu, Nanod_ftu2Dbl,
-	output Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_inl2psw, Nanod_ftu2Sr, Nanod_sr2Ftu, Nanod_ftu2Ccr,
-	output Nanod_pswIToFtu, Nanod_initST, Nanod_ird2Ftu, Nanod_ssw2Ftu, Nanod_Ir2Ird,
-	output Nanod_db2Aob, Nanod_ab2Aob, Nanod_au2Aob, Nanod_updSsw, Nanod_abh2reg, Nanod_abl2reg,
-	output Nanod_reg2abl, Nanod_reg2abh, Nanod_dbh2reg, Nanod_dbl2reg, Nanod_reg2dbl, Nanod_reg2dbh,
-	output Nanod_ssp, Nanod_rxlDbl, 
-	output Nanod_pchdbh,
-	output Nanod_pcldbl, Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit, Nanod_aluFinish,
-	output Nanod_au2Db, Nanod_au2Ab, Nanod_au2Pc, Nanod_dbin2Abd, Nanod_dbin2Dbd,
-	output Nanod_abdIsByte,
-	output reg Nanod_rxh2dbh, Nanod_rxh2abh, Nanod_dbl2rxl, Nanod_abh2rxh, Nanod_dbh2rxh, Nanod_auClkEn, Nanod_noSpAlign, Nanod_abl2ryl,
-	output reg Nanod_extDbh, Nanod_extAbh, Nanod_todbin, Nanod_toIrc, Nanod_ablAbd, Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh,
-	output reg Nanod_dbl2Atl, Nanod_atl2Dbl, Nanod_abl2Atl, Nanod_atl2Abl, Nanod_aob2Ab, Nanod_abh2Ath, Nanod_dcr2Dbd, Nanod_alue2Dbd,
-	output reg Nanod_dbh2Ath, Nanod_ath2Dbh, Nanod_ath2Abh, Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_abd2Dcr, Nanod_dbd2Alue, Nanod_ryl2db,
-	output reg Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl, Nanod_dbh2ryh, Nanod_abh2ryh, Nanod_dbl2ryl,
-	output reg Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh, Nanod_isRmc,
-	output reg [2:0] Nanod_auCntrl,
-	output reg [1:0] Nanod_dobCtrl,
-	output [2:0] Nanod_aluColumn,
-	output [1:0] Nanod_aluDctrl,
+module nDecoder3( input s_clks Clks, input s_irdecod Irdecod, output s_nanod Nanod,
 	input enT2, enT4,
 	input [UROM_WIDTH-1:0] microLatch,
 	input [NANO_WIDTH-1:0] nanoLatch);
@@ -714,128 +735,128 @@ localparam NANO_FTU_CONST = 1;
 	wire [1:0] aobCtrl = nanoLatch[ NANO_AOBCTRL+1:NANO_AOBCTRL];
 	wire [1:0] dobCtrl = {nanoLatch[ NANO_DOBCTRL_1], nanoLatch[NANO_DOBCTRL_0]};
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT4) begin
 			// Reverse order!
 			ftuCtrl <= { nanoLatch[ NANO_FTUCONTROL+0], nanoLatch[ NANO_FTUCONTROL+1], nanoLatch[ NANO_FTUCONTROL+2], nanoLatch[ NANO_FTUCONTROL+3]} ;
 				
-			Nanod_auClkEn <= !nanoLatch[ NANO_AUCLKEN];
-			Nanod_auCntrl <= nanoLatch[ NANO_AUCTRL+2 : NANO_AUCTRL+0];
-			Nanod_noSpAlign <= (nanoLatch[ NANO_NO_SP_ALGN + 1:NANO_NO_SP_ALGN] == 2'b11);			
-			Nanod_extDbh <= nanoLatch[ NANO_EXT_DBH];
-			Nanod_extAbh <= nanoLatch[ NANO_EXT_ABH];
-			Nanod_todbin <= nanoLatch[ NANO_TODBIN];
-			Nanod_toIrc <=  nanoLatch[ NANO_TOIRC];
+			Nanod.auClkEn <= !nanoLatch[ NANO_AUCLKEN];
+			Nanod.auCntrl <= nanoLatch[ NANO_AUCTRL+2 : NANO_AUCTRL+0];
+			Nanod.noSpAlign <= (nanoLatch[ NANO_NO_SP_ALGN + 1:NANO_NO_SP_ALGN] == 2'b11);			
+			Nanod.extDbh <= nanoLatch[ NANO_EXT_DBH];
+			Nanod.extAbh <= nanoLatch[ NANO_EXT_ABH];
+			Nanod.todbin <= nanoLatch[ NANO_TODBIN];
+			Nanod.toIrc <=  nanoLatch[ NANO_TOIRC];
 			
 			// ablAbd is disabled on byte transfers (adbhCharge plus irdIsByte). Not sure the combination makes much sense.
 			// It happens in a few cases but I don't see anything enabled on abL (or abH) section anyway.
 			
-			Nanod_ablAbd <= nanoLatch[ NANO_ABLABD];
-			Nanod_ablAbh <= nanoLatch[ NANO_ABLABH];
-			Nanod_dblDbd <= nanoLatch[ NANO_DBLDBD];
-			Nanod_dblDbh <= nanoLatch[ NANO_DBLDBH];
+			Nanod.ablAbd <= nanoLatch[ NANO_ABLABD];
+			Nanod.ablAbh <= nanoLatch[ NANO_ABLABH];
+			Nanod.dblDbd <= nanoLatch[ NANO_DBLDBD];
+			Nanod.dblDbh <= nanoLatch[ NANO_DBLDBH];
 			
-			Nanod_dbl2Atl <= (atlCtrl == 3'b010);
-			Nanod_atl2Dbl <= (atlCtrl == 3'b011);
-			Nanod_abl2Atl <= (atlCtrl == 3'b100);
-			Nanod_atl2Abl <= (atlCtrl == 3'b101);
+			Nanod.dbl2Atl <= (atlCtrl == 3'b010);
+			Nanod.atl2Dbl <= (atlCtrl == 3'b011);
+			Nanod.abl2Atl <= (atlCtrl == 3'b100);
+			Nanod.atl2Abl <= (atlCtrl == 3'b101);
 
-			Nanod_aob2Ab <= (athCtrl == 3'b101);		// Used on BSER1 only
+			Nanod.aob2Ab <= (athCtrl == 3'b101);		// Used on BSER1 only
 			
-			Nanod_abh2Ath <= (athCtrl == 3'b001) | (athCtrl == 3'b101);
-			Nanod_dbh2Ath <= (athCtrl == 3'b100);
-			Nanod_ath2Dbh <= (athCtrl == 3'b110);
-			Nanod_ath2Abh <= (athCtrl == 3'b011);			
+			Nanod.abh2Ath <= (athCtrl == 3'b001) | (athCtrl == 3'b101);
+			Nanod.dbh2Ath <= (athCtrl == 3'b100);
+			Nanod.ath2Dbh <= (athCtrl == 3'b110);
+			Nanod.ath2Abh <= (athCtrl == 3'b011);			
 
-			Nanod_alu2Dbd <= nanoLatch[ NANO_ALU2DBD];
-			Nanod_alu2Abd <= nanoLatch[ NANO_ALU2ABD];
+			Nanod.alu2Dbd <= nanoLatch[ NANO_ALU2DBD];
+			Nanod.alu2Abd <= nanoLatch[ NANO_ALU2ABD];
 			
-			Nanod_abd2Dcr <= (nanoLatch[ NANO_DCR+1:NANO_DCR] == 2'b11);
-			Nanod_dcr2Dbd <= (nanoLatch[ NANO_DCR+2:NANO_DCR+1] == 2'b11);
-			Nanod_dbd2Alue <= (nanoLatch[ NANO_ALUE+2:NANO_ALUE+1] == 2'b10);
-			Nanod_alue2Dbd <= (nanoLatch[ NANO_ALUE+1:NANO_ALUE] == 2'b01);
+			Nanod.abd2Dcr <= (nanoLatch[ NANO_DCR+1:NANO_DCR] == 2'b11);
+			Nanod.dcr2Dbd <= (nanoLatch[ NANO_DCR+2:NANO_DCR+1] == 2'b11);
+			Nanod.dbd2Alue <= (nanoLatch[ NANO_ALUE+2:NANO_ALUE+1] == 2'b10);
+			Nanod.alue2Dbd <= (nanoLatch[ NANO_ALUE+1:NANO_ALUE] == 2'b01);
 
-			Nanod_dbd2Alub <= nanoLatch[ NANO_DBD2ALUB];
-			Nanod_abd2Alub <= nanoLatch[ NANO_ABD2ALUB];			
+			Nanod.dbd2Alub <= nanoLatch[ NANO_DBD2ALUB];
+			Nanod.abd2Alub <= nanoLatch[ NANO_ABD2ALUB];			
 			
 			// Originally not latched. We better should because we transfer one cycle later, T3 instead of T1.
-			Nanod_dobCtrl <= dobCtrl;
+			Nanod.dobCtrl <= dobCtrl;
 			// Nanod.adb2Dob <= (dobCtrl == 2'b10);			Nanod.dbd2Dob <= (dobCtrl == 2'b01);			Nanod.alu2Dob <= (dobCtrl == 2'b11);
 							
 		end
 	end
 	
 	// Update SSW at the start of Bus/Addr error ucode
-	assign Nanod_updSsw = Nanod_aob2Ab;
+	assign Nanod.updSsw = Nanod.aob2Ab;
 
-	assign Nanod_updTpend = (ftuCtrl == NANO_FTU_UPDTPEND);
-	assign Nanod_clrTpend = (ftuCtrl == NANO_FTU_CLRTPEND);
-	assign Nanod_tvn2Ftu = (ftuCtrl == NANO_FTU_TVN);
-	assign Nanod_const2Ftu = (ftuCtrl == NANO_FTU_CONST);
-	assign Nanod_ftu2Dbl = (ftuCtrl == NANO_FTU_DBL) | ( ftuCtrl == NANO_FTU_INL);	
-	assign Nanod_ftu2Abl = (ftuCtrl == NANO_FTU_2ABL);	
-	assign Nanod_inl2psw = (ftuCtrl == NANO_FTU_INL);
-	assign Nanod_pswIToFtu = (ftuCtrl == NANO_FTU_PSWI);
-	assign Nanod_ftu2Sr = (ftuCtrl == NANO_FTU_2SR);
-	assign Nanod_sr2Ftu = (ftuCtrl == NANO_FTU_RDSR);
-	assign Nanod_ird2Ftu = (ftuCtrl == NANO_FTU_IRD);		// Used on bus/addr error
-	assign Nanod_ssw2Ftu = (ftuCtrl == NANO_FTU_SSW);
-	assign Nanod_initST = (ftuCtrl == NANO_FTU_INL) | (ftuCtrl == NANO_FTU_CLRTPEND) | (ftuCtrl == NANO_FTU_INIT_ST);
-	assign Nanod_abl2Pren = (ftuCtrl == NANO_FTU_ABL2PREN);
-	assign Nanod_updPren = (ftuCtrl == NANO_FTU_RSTPREN);
+	assign Nanod.updTpend = (ftuCtrl == NANO_FTU_UPDTPEND);
+	assign Nanod.clrTpend = (ftuCtrl == NANO_FTU_CLRTPEND);
+	assign Nanod.tvn2Ftu = (ftuCtrl == NANO_FTU_TVN);
+	assign Nanod.const2Ftu = (ftuCtrl == NANO_FTU_CONST);
+	assign Nanod.ftu2Dbl = (ftuCtrl == NANO_FTU_DBL) | ( ftuCtrl == NANO_FTU_INL);	
+	assign Nanod.ftu2Abl = (ftuCtrl == NANO_FTU_2ABL);	
+	assign Nanod.inl2psw = (ftuCtrl == NANO_FTU_INL);
+	assign Nanod.pswIToFtu = (ftuCtrl == NANO_FTU_PSWI);
+	assign Nanod.ftu2Sr = (ftuCtrl == NANO_FTU_2SR);
+	assign Nanod.sr2Ftu = (ftuCtrl == NANO_FTU_RDSR);
+	assign Nanod.ird2Ftu = (ftuCtrl == NANO_FTU_IRD);		// Used on bus/addr error
+	assign Nanod.ssw2Ftu = (ftuCtrl == NANO_FTU_SSW);
+	assign Nanod.initST = (ftuCtrl == NANO_FTU_INL) | (ftuCtrl == NANO_FTU_CLRTPEND) | (ftuCtrl == NANO_FTU_INIT_ST);
+	assign Nanod.abl2Pren = (ftuCtrl == NANO_FTU_ABL2PREN);
+	assign Nanod.updPren = (ftuCtrl == NANO_FTU_RSTPREN);
 	
-	assign Nanod_Ir2Ird = nanoLatch[ NANO_IR2IRD];
+	assign Nanod.Ir2Ird = nanoLatch[ NANO_IR2IRD];
 
 	// ALU control better latched later after combining with IRD decoding
 		
-	assign Nanod_aluDctrl = nanoLatch[ NANO_ALU_DCTRL+1 : NANO_ALU_DCTRL];
-	assign Nanod_aluActrl = nanoLatch[ NANO_ALU_ACTRL];
-	assign Nanod_aluColumn = { nanoLatch[ NANO_ALU_COL], nanoLatch[ NANO_ALU_COL+1], nanoLatch[ NANO_ALU_COL+2]};
+	assign Nanod.aluDctrl = nanoLatch[ NANO_ALU_DCTRL+1 : NANO_ALU_DCTRL];
+	assign Nanod.aluActrl = nanoLatch[ NANO_ALU_ACTRL];
+	assign Nanod.aluColumn = { nanoLatch[ NANO_ALU_COL], nanoLatch[ NANO_ALU_COL+1], nanoLatch[ NANO_ALU_COL+2]};
 	wire [1:0] aluFinInit = nanoLatch[ NANO_ALU_FI+1:NANO_ALU_FI];
-	assign Nanod_aluFinish = (aluFinInit == 2'b10);
-	assign Nanod_aluInit = (aluFinInit == 2'b01);
+	assign Nanod.aluFinish = (aluFinInit == 2'b10);
+	assign Nanod.aluInit = (aluFinInit == 2'b01);
 
 	// FTU 2 CCR encoded as both ALU Init and ALU Finish set.
 	// In theory this encoding allows writes to CCR without writing to SR
 	// But FTU 2 CCR and to SR are both set together at nanorom.
-	assign Nanod_ftu2Ccr = ( aluFinInit == 2'b11);
+	assign Nanod.ftu2Ccr = ( aluFinInit == 2'b11);
 
-	assign Nanod_abdIsByte = nanoLatch[ NANO_ABDHRECHARGE];
+	assign Nanod.abdIsByte = nanoLatch[ NANO_ABDHRECHARGE];
 	
 	// Not being latched on T4 creates non unique case warning!
-	assign Nanod_au2Db = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b01);
-	assign Nanod_au2Ab = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b10);
-	assign Nanod_au2Pc = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b11);
+	assign Nanod.au2Db = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b01);
+	assign Nanod.au2Ab = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b10);
+	assign Nanod.au2Pc = (nanoLatch[ NANO_AUOUT + 1: NANO_AUOUT] == 2'b11);
 	
-	assign Nanod_db2Aob = (aobCtrl == 2'b10);
-	assign Nanod_ab2Aob = (aobCtrl == 2'b01);
-	assign Nanod_au2Aob = (aobCtrl == 2'b11);
+	assign Nanod.db2Aob = (aobCtrl == 2'b10);
+	assign Nanod.ab2Aob = (aobCtrl == 2'b01);
+	assign Nanod.au2Aob = (aobCtrl == 2'b11);
 	
-	assign Nanod_dbin2Abd = nanoLatch[ NANO_DBIN2ABD];
-	assign Nanod_dbin2Dbd = nanoLatch[ NANO_DBIN2DBD];
+	assign Nanod.dbin2Abd = nanoLatch[ NANO_DBIN2ABD];
+	assign Nanod.dbin2Dbd = nanoLatch[ NANO_DBIN2DBD];
 	
-	assign Nanod_permStart = (| aobCtrl);
-	assign Nanod_isWrite  = ( | dobCtrl);
-	assign Nanod_waitBusFinish = nanoLatch[ NANO_TOIRC] | nanoLatch[ NANO_TODBIN] | Nanod_isWrite;
-	assign Nanod_busByte = nanoLatch[ NANO_BUSBYTE];
+	assign Nanod.permStart = (| aobCtrl);
+	assign Nanod.isWrite  = ( | dobCtrl);
+	assign Nanod.waitBusFinish = nanoLatch[ NANO_TOIRC] | nanoLatch[ NANO_TODBIN] | Nanod.isWrite;
+	assign Nanod.busByte = nanoLatch[ NANO_BUSBYTE];
 	
-	assign Nanod_noLowByte = nanoLatch[ NANO_LOWBYTE];
-	assign Nanod_noHighByte = nanoLatch[ NANO_HIGHBYTE];	
+	assign Nanod.noLowByte = nanoLatch[ NANO_LOWBYTE];
+	assign Nanod.noHighByte = nanoLatch[ NANO_HIGHBYTE];	
 			
 	// Not registered. Register at T4 after combining
 	// Might be better to remove all those and combine here instead of at execution unit !!
-	assign Nanod_abl2reg = nanoLatch[ NANO_ABL2REG];
-	assign Nanod_abh2reg = nanoLatch[ NANO_ABH2REG];
-	assign Nanod_dbl2reg = nanoLatch[ NANO_DBL2REG];
-	assign Nanod_dbh2reg = nanoLatch[ NANO_DBH2REG];
-	assign Nanod_reg2dbl = nanoLatch[ NANO_REG2DBL];
-	assign Nanod_reg2dbh = nanoLatch[ NANO_REG2DBH];
-	assign Nanod_reg2abl = nanoLatch[ NANO_REG2ABL];
-	assign Nanod_reg2abh = nanoLatch[ NANO_REG2ABH];
+	assign Nanod.abl2reg = nanoLatch[ NANO_ABL2REG];
+	assign Nanod.abh2reg = nanoLatch[ NANO_ABH2REG];
+	assign Nanod.dbl2reg = nanoLatch[ NANO_DBL2REG];
+	assign Nanod.dbh2reg = nanoLatch[ NANO_DBH2REG];
+	assign Nanod.reg2dbl = nanoLatch[ NANO_REG2DBL];
+	assign Nanod.reg2dbh = nanoLatch[ NANO_REG2DBH];
+	assign Nanod.reg2abl = nanoLatch[ NANO_REG2ABL];
+	assign Nanod.reg2abh = nanoLatch[ NANO_REG2ABH];
 	
-	assign Nanod_ssp = nanoLatch[ NANO_SSP];
+	assign Nanod.ssp = nanoLatch[ NANO_SSP];
 	
-	assign Nanod_rz = nanoLatch[ NANO_RZ];
+	assign Nanod.rz = nanoLatch[ NANO_RZ];
 	
 	// Actually DTL can't happen on PC relative mode. See IR decoder.
 	
@@ -844,10 +865,10 @@ localparam NANO_FTU_CONST = 1;
 	wire dtlabd = 1'b0;
 	wire dthabh = 1'b0;
 	
-	wire dblSpecial = Nanod_pcldbl | dtldbd;
-	wire dbhSpecial = Nanod_pchdbh | dthdbh;
-	wire ablSpecial = Nanod_pclabl | dtlabd;
-	wire abhSpecial = Nanod_pchabh | dthabh;
+	wire dblSpecial = Nanod.pcldbl | dtldbd;
+	wire dbhSpecial = Nanod.pchdbh | dthdbh;
+	wire ablSpecial = Nanod.pclabl | dtlabd;
+	wire abhSpecial = Nanod.pchabh | dthabh;
 			
 	//
 	// Combine with IRD decoding
@@ -856,53 +877,53 @@ localparam NANO_FTU_CONST = 1;
 	
 	// PC used instead of RY on PC relative instuctions
 	
-	assign Nanod_rxlDbl = nanoLatch[ NANO_RXL_DBL];
-	wire isPcRel = Irdecod_isPcRel & !Nanod_rz;
+	assign Nanod.rxlDbl = nanoLatch[ NANO_RXL_DBL];
+	wire isPcRel = Irdecod.isPcRel & !Nanod.rz;
 	wire pcRelDbl = isPcRel & !nanoLatch[ NANO_RXL_DBL];
 	wire pcRelDbh = isPcRel & !nanoLatch[ NANO_RXH_DBH];
 	wire pcRelAbl = isPcRel & nanoLatch[ NANO_RXL_DBL];
 	wire pcRelAbh = isPcRel & nanoLatch[ NANO_RXH_DBH];
 	
-	assign Nanod_pcldbl = nanoLatch[ NANO_PCLDBL] | pcRelDbl;
-	assign Nanod_pchdbh = (nanoLatch[ NANO_PCH+1:NANO_PCH] == 2'b01) | pcRelDbh;
+	assign Nanod.pcldbl = nanoLatch[ NANO_PCLDBL] | pcRelDbl;
+	assign Nanod.pchdbh = (nanoLatch[ NANO_PCH+1:NANO_PCH] == 2'b01) | pcRelDbh;
 	
-	assign Nanod_pclabl = nanoLatch[ NANO_PCLABL] | pcRelAbl;
-	assign Nanod_pchabh = (nanoLatch[ NANO_PCH+1:NANO_PCH] == 2'b10) | pcRelAbh;
+	assign Nanod.pclabl = nanoLatch[ NANO_PCLABL] | pcRelAbl;
+	assign Nanod.pchabh = (nanoLatch[ NANO_PCH+1:NANO_PCH] == 2'b10) | pcRelAbh;
 
 	// Might be better not to register these signals to allow latching RX/RY mux earlier!
 	// But then must latch Irdecod.isPcRel on T3!
 
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT4) begin
-			Nanod_rxl2db <= Nanod_reg2dbl & !dblSpecial & nanoLatch[ NANO_RXL_DBL];
-			Nanod_rxl2ab <= Nanod_reg2abl & !ablSpecial & !nanoLatch[ NANO_RXL_DBL];
+			Nanod.rxl2db <= Nanod.reg2dbl & !dblSpecial & nanoLatch[ NANO_RXL_DBL];
+			Nanod.rxl2ab <= Nanod.reg2abl & !ablSpecial & !nanoLatch[ NANO_RXL_DBL];
 			
-			Nanod_dbl2rxl <= Nanod_dbl2reg & !dblSpecial & nanoLatch[ NANO_RXL_DBL];	
-			Nanod_abl2rxl <= Nanod_abl2reg & !ablSpecial & !nanoLatch[ NANO_RXL_DBL];	
+			Nanod.dbl2rxl <= Nanod.dbl2reg & !dblSpecial & nanoLatch[ NANO_RXL_DBL];	
+			Nanod.abl2rxl <= Nanod.abl2reg & !ablSpecial & !nanoLatch[ NANO_RXL_DBL];	
 
-			Nanod_rxh2dbh <= Nanod_reg2dbh & !dbhSpecial & nanoLatch[ NANO_RXH_DBH];			
-			Nanod_rxh2abh <= Nanod_reg2abh & !abhSpecial & !nanoLatch[ NANO_RXH_DBH];			
+			Nanod.rxh2dbh <= Nanod.reg2dbh & !dbhSpecial & nanoLatch[ NANO_RXH_DBH];			
+			Nanod.rxh2abh <= Nanod.reg2abh & !abhSpecial & !nanoLatch[ NANO_RXH_DBH];			
 				
-			Nanod_dbh2rxh <= Nanod_dbh2reg & !dbhSpecial & nanoLatch[ NANO_RXH_DBH];
-			Nanod_abh2rxh <= Nanod_abh2reg & !abhSpecial & !nanoLatch[ NANO_RXH_DBH];	
+			Nanod.dbh2rxh <= Nanod.dbh2reg & !dbhSpecial & nanoLatch[ NANO_RXH_DBH];
+			Nanod.abh2rxh <= Nanod.abh2reg & !abhSpecial & !nanoLatch[ NANO_RXH_DBH];	
 
-			Nanod_dbh2ryh <= Nanod_dbh2reg & !dbhSpecial & !nanoLatch[ NANO_RXH_DBH];
-			Nanod_abh2ryh <= Nanod_abh2reg & !abhSpecial & nanoLatch[ NANO_RXH_DBH];	
+			Nanod.dbh2ryh <= Nanod.dbh2reg & !dbhSpecial & !nanoLatch[ NANO_RXH_DBH];
+			Nanod.abh2ryh <= Nanod.abh2reg & !abhSpecial & nanoLatch[ NANO_RXH_DBH];	
 
-			Nanod_dbl2ryl <= Nanod_dbl2reg & !dblSpecial & !nanoLatch[ NANO_RXL_DBL];	
-			Nanod_abl2ryl <= Nanod_abl2reg & !ablSpecial & nanoLatch[ NANO_RXL_DBL];	
+			Nanod.dbl2ryl <= Nanod.dbl2reg & !dblSpecial & !nanoLatch[ NANO_RXL_DBL];	
+			Nanod.abl2ryl <= Nanod.abl2reg & !ablSpecial & nanoLatch[ NANO_RXL_DBL];	
 
-			Nanod_ryl2db <= Nanod_reg2dbl & !dblSpecial & !nanoLatch[ NANO_RXL_DBL];
-			Nanod_ryl2ab <= Nanod_reg2abl & !ablSpecial & nanoLatch[ NANO_RXL_DBL];
+			Nanod.ryl2db <= Nanod.reg2dbl & !dblSpecial & !nanoLatch[ NANO_RXL_DBL];
+			Nanod.ryl2ab <= Nanod.reg2abl & !ablSpecial & nanoLatch[ NANO_RXL_DBL];
 
-			Nanod_ryh2dbh <= Nanod_reg2dbh & !dbhSpecial & !nanoLatch[ NANO_RXH_DBH];			
-			Nanod_ryh2abh <= Nanod_reg2abh & !abhSpecial & nanoLatch[ NANO_RXH_DBH];					
+			Nanod.ryh2dbh <= Nanod.reg2dbh & !dbhSpecial & !nanoLatch[ NANO_RXH_DBH];			
+			Nanod.ryh2abh <= Nanod.reg2abh & !abhSpecial & nanoLatch[ NANO_RXH_DBH];					
 		end
 		
 		// Originally isTas only delayed on T2 (and seems only a late mask rev fix)
 		// Better latch the combination on T4
 		if( enT4)
-			Nanod_isRmc <= Irdecod_isTas & nanoLatch[ NANO_BUSBYTE];
+			Nanod.isRmc <= Irdecod.isTas & nanoLatch[ NANO_BUSBYTE];
 	end
 			
 	
@@ -914,11 +935,8 @@ endmodule
 // IRD updated on T1, while ncode still executing. To avoid using the next IRD,
 // decoded signals must be registered on T3, or T4 before using them.
 //
-module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod_ftuConst, output reg [5:0]Irdecod_macroTvn,
-			output Irdecod_isTas, output reg Irdecod_implicitSp, output [2:0] Irdecod_rx, output [2:0] Irdecod_ry, 
-			output Irdecod_toCcr, output Irdecod_rxIsDt, output reg Irdecod_isByte, output Irdecod_isMovep, output Irdecod_inhibitCcr,
-			output Irdecod_ryIsDt, output Irdecod_rxIsUsp, output reg Irdecod_rxIsMovem, output Irdecod_movemPreDecr,
-			output reg Irdecod_rxIsAreg, Irdecod_ryIsAreg);
+module irdDecode( input [15:0] ird,
+			output s_irdecod Irdecod);
 
 	wire [3:0] line = ird[15:12];
 	logic [15:0] lineOnehot;
@@ -929,81 +947,81 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 	wire isRegShift = (lineOnehot['he]) & (ird[7:6] != 2'b11);
 	wire isDynShift = isRegShift & ird[5];
 					
-	assign Irdecod_isPcRel = (& ird[ 5:3]) & ~isDynShift & !ird[2] & ird[1];		
-	assign Irdecod_isTas = lineOnehot[4] & (ird[11:6] == 6'b101011);
+	assign Irdecod.isPcRel = (& ird[ 5:3]) & ~isDynShift & !ird[2] & ird[1];		
+	assign Irdecod.isTas = lineOnehot[4] & (ird[11:6] == 6'b101011);
 	
-	assign Irdecod_rx = ird[11:9];
-	assign Irdecod_ry = ird[ 2:0];
+	assign Irdecod.rx = ird[11:9];
+	assign Irdecod.ry = ird[ 2:0];
 
 	wire isPreDecr = (ird[ 5:3] == 3'b100);
 	wire eaAreg = (ird[5:3] == 3'b001);
 		
 	// rx is A or D
 	// movem
-	always @* begin
-		case( 1'b1)
+	always_comb begin
+		unique case( 1'b1)
 		lineOnehot[1],
 		lineOnehot[2],
 		lineOnehot[3]:
 					// MOVE: RX always Areg except if dest mode is Dn 000
-					Irdecod_rxIsAreg = (| ird[8:6]);
+					Irdecod.rxIsAreg = (| ird[8:6]);
 
-		lineOnehot[4]:		Irdecod_rxIsAreg = (& ird[8:6]);		// not CHK (LEA)
+		lineOnehot[4]:		Irdecod.rxIsAreg = (& ird[8:6]);		// not CHK (LEA)
 
-		lineOnehot['h8]:	Irdecod_rxIsAreg = eaAreg & ird[8] & ~ird[7];	// SBCD
-		lineOnehot['hc]:	Irdecod_rxIsAreg = eaAreg & ird[8] & ~ird[7];	// ABCD/EXG An,An				
+		lineOnehot['h8]:	Irdecod.rxIsAreg = eaAreg & ird[8] & ~ird[7];	// SBCD
+		lineOnehot['hc]:	Irdecod.rxIsAreg = eaAreg & ird[8] & ~ird[7];	// ABCD/EXG An,An				
 		
 		lineOnehot['h9],
 		lineOnehot['hb],
-		lineOnehot['hd]:	Irdecod_rxIsAreg =
+		lineOnehot['hd]:	Irdecod.rxIsAreg =
 							(ird[7] & ird[6]) |								// SUBA/CMPA/ADDA
 							(eaAreg & ird[8] & (ird[7:6] != 2'b11));		// SUBX/CMPM/ADDX		
 		default:
-				Irdecod_rxIsAreg = Irdecod_implicitSp;
+				Irdecod.rxIsAreg = Irdecod.implicitSp;
 		endcase
 	end	
 
 	// RX is movem
-	always @* begin
-		Irdecod_rxIsMovem = lineOnehot[4] & ~ird[8] & ~Irdecod_implicitSp;
+	always_comb begin
+		Irdecod.rxIsMovem = lineOnehot[4] & ~ird[8] & ~Irdecod.implicitSp;
 	end
-	assign Irdecod_movemPreDecr = Irdecod_rxIsMovem & isPreDecr;
+	assign Irdecod.movemPreDecr = Irdecod.rxIsMovem & isPreDecr;
 	
 	// RX is DT.
 	// but SSP explicit or pc explicit has higher priority!
 	// addq/subq (scc & dbcc also, but don't use rx)
 	// Immediate including static bit
-	assign Irdecod_rxIsDt = lineOnehot[5] | (lineOnehot[0] & ~ird[8]);
+	assign Irdecod.rxIsDt = lineOnehot[5] | (lineOnehot[0] & ~ird[8]);
 	
 	// RX is USP
-	assign Irdecod_rxIsUsp = lineOnehot[4] & (ird[ 11:4] == 8'he6);
+	assign Irdecod.rxIsUsp = lineOnehot[4] & (ird[ 11:4] == 8'he6);
 	
 	// RY is DT
 	// rz or PC explicit has higher priority
 	
 	wire eaImmOrAbs = (ird[5:3] == 3'b111) & ~ird[1];
-	assign Irdecod_ryIsDt = eaImmOrAbs & ~isRegShift;
+	assign Irdecod.ryIsDt = eaImmOrAbs & ~isRegShift;
 		
 	// RY is Address register
-	always @* begin
+	always_comb begin
 		logic eaIsAreg;
 		
 		// On most cases RY is Areg expect if mode is 000 (DATA REG) or 111 (IMM, ABS,PC REL)
 		eaIsAreg = (ird[5:3] != 3'b000) & (ird[5:3] != 3'b111);
 		
-		case( 1'b1)
+		unique case( 1'b1)
 				// MOVE: RY always Areg expect if mode is 000 (DATA REG) or 111 (IMM, ABS,PC REL)
 				// Most lines, including misc line 4, also.
-		default:		Irdecod_ryIsAreg = eaIsAreg;
+		default:		Irdecod.ryIsAreg = eaIsAreg;
 
 		lineOnehot[5]:	// DBcc is an exception
-						Irdecod_ryIsAreg = eaIsAreg & (ird[7:3] != 5'b11001);
+						Irdecod.ryIsAreg = eaIsAreg & (ird[7:3] != 5'b11001);
 
 		lineOnehot[6],
-		lineOnehot[7]:	Irdecod_ryIsAreg = 1'b0;
+		lineOnehot[7]:	Irdecod.ryIsAreg = 1'b0;
 
 		lineOnehot['he]:
-						Irdecod_ryIsAreg = ~isRegShift;
+						Irdecod.ryIsAreg = ~isRegShift;
 		endcase
 	end	
 
@@ -1014,34 +1032,34 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 		
 	wire xIsScc = (ird[7:6] == 2'b11) & (ird[5:3] != 3'b001); 
 	wire xStaticMem = (ird[11:8] == 4'b1000) & (ird[5:4] == 2'b00);		// Static bit to mem
-	always @* begin
-		case( 1'b1)
+	always_comb begin
+		unique case( 1'b1)
 		lineOnehot[0]:
-				Irdecod_isByte = 
+				Irdecod.isByte = 
 				( ird[8] & (ird[5:4] != 2'b00)					) |	// Dynamic bit to mem
 				( (ird[11:8] == 4'b1000) & (ird[5:4] != 2'b00)	) |	// Static bit to mem
 				( (ird[8:7] == 2'b10) & (ird[5:3] == 3'b001)	) |	// Movep from mem only! For byte mux
 				( (ird[8:6] == 3'b000) & !xStaticMem );				// Immediate byte
 								
-		lineOnehot[1]:			Irdecod_isByte = 1'b1;		// MOVE.B
+		lineOnehot[1]:			Irdecod.isByte = 1'b1;		// MOVE.B
 	
 		
-		lineOnehot[4]:			Irdecod_isByte = (ird[7:6] == 2'b00) | Irdecod_isTas;		
-		lineOnehot[5]:			Irdecod_isByte = (ird[7:6] == 2'b00) | xIsScc;
+		lineOnehot[4]:			Irdecod.isByte = (ird[7:6] == 2'b00) | Irdecod.isTas;		
+		lineOnehot[5]:			Irdecod.isByte = (ird[7:6] == 2'b00) | xIsScc;
 		
 		lineOnehot[8],
 		lineOnehot[9],
 		lineOnehot['hb],
 		lineOnehot['hc],
 		lineOnehot['hd],
-		lineOnehot['he]:		Irdecod_isByte = (ird[7:6] == 2'b00);
+		lineOnehot['he]:		Irdecod.isByte = (ird[7:6] == 2'b00);
 		
-		default:				Irdecod_isByte = 1'b0;
+		default:				Irdecod.isByte = 1'b0;
 		endcase
 	end	
 	
 	// Need it for special byte size. Bus is byte, but whole register word is modified.
-	assign Irdecod_isMovep = lineOnehot[0] & ird[8] & eaAreg;
+	assign Irdecod.isMovep = lineOnehot[0] & ird[8] & eaAreg;
 	
 	
 	// rxIsSP implicit use of RX for actual SP transfer
@@ -1049,20 +1067,20 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 	// This logic is simple and will include some instructions that don't actually reference SP.
 	// But doesn't matter as long as they don't perform any RX transfer.
 	
-	always @* begin
-		case( 1'b1)
-		lineOnehot[6]:		Irdecod_implicitSp = (ird[11:8] == 4'b0001);		// BSR
+	always_comb begin
+		unique case( 1'b1)
+		lineOnehot[6]:		Irdecod.implicitSp = (ird[11:8] == 4'b0001);		// BSR
 		lineOnehot[4]:
 			// Misc like RTS, JSR, etc
-			Irdecod_implicitSp = (ird[11:8] == 4'b1110) | (ird[11:6] == 6'b1000_01);
-		default:			Irdecod_implicitSp = 1'b0;
+			Irdecod.implicitSp = (ird[11:8] == 4'b1110) | (ird[11:6] == 6'b1000_01);
+		default:			Irdecod.implicitSp = 1'b0;
 		endcase
 	end
 	
 	// Modify CCR (and not SR)
 	// Probably overkill !! Only needs to distinguish SR vs CCR
 	// RTR, MOVE to CCR, xxxI to CCR
-	assign Irdecod_toCcr =	( lineOnehot[4] & ((ird[11:0] == 12'he77) | (ird[11:6] == 6'b010011)) ) |
+	assign Irdecod.toCcr =	( lineOnehot[4] & ((ird[11:0] == 12'he77) | (ird[11:6] == 6'b010011)) ) |
 							( lineOnehot[0] & (ird[8:6] == 3'b000));
 	
 	// FTU constants
@@ -1071,8 +1089,8 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 	logic [15:0] ftuConst;
 	wire [3:0] zero28 = (ird[11:9] == 0) ? 4'h8 : { 1'b0, ird[11:9]};		// xltate 0,1-7 into 8,1-7
 
-	always @* begin
-		case( 1'b1)
+	always_comb begin
+		unique case( 1'b1)
 		lineOnehot[6],														// Bcc short
 		lineOnehot[7]:		ftuConst = { { 8{ ird[ 7]}}, ird[ 7:0] };		// MOVEQ
 		
@@ -1088,22 +1106,22 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 		default:			ftuConst = '0;
 		endcase	
 	end	
-	assign Irdecod_ftuConst = ftuConst;
+	assign Irdecod.ftuConst = ftuConst;
 	
 	//
 	// TRAP Vector # for group 2 exceptions
 	//
 	
-	always @* begin
+	always_comb begin
 		if( lineOnehot[4]) begin
 			case ( ird[6:5])
-			2'b00,2'b01:	Irdecod_macroTvn = 6;					// CHK
-			2'b11:			Irdecod_macroTvn = 7;					// TRAPV
-			2'b10:			Irdecod_macroTvn = {2'b10, ird[3:0]};	// TRAP
+			2'b00,2'b01:	Irdecod.macroTvn = 6;					// CHK
+			2'b11:			Irdecod.macroTvn = 7;					// TRAPV
+			2'b10:			Irdecod.macroTvn = {2'b10, ird[3:0]};	// TRAP
 			endcase
 		end
 		else
-							Irdecod_macroTvn = 5;					// Division by zero
+							Irdecod.macroTvn = 5;					// Division by zero
 	end
 	
 	
@@ -1113,7 +1131,7 @@ module irdDecode( input [15:0] ird, output Irdecod_isPcRel, output [15:0]Irdecod
 	// Opcodes variants that don't affect flags
 	// ADDA/SUBA ADDQ/SUBQ MOVEA
 
-	assign Irdecod_inhibitCcr =
+	assign Irdecod.inhibitCcr =
 		( (lineOnehot[9] | lineOnehot['hd]) & size11) |				// ADDA/SUBA
 		( lineOnehot[5] & eaAdir) |									// ADDQ/SUBQ to An (originally checks for line[4] as well !?)
 		( (lineOnehot[2] | lineOnehot[3]) & ird[8:6] == 3'b001);	// MOVEA
@@ -1129,27 +1147,11 @@ endmodule
 
 */
 
-module excUnit( input Clks_clk, input Clks_extReset, 
-	input Clks_pwrUp, input Clks_enPhi2, 
+module excUnit( input s_clks Clks,
 	input enT1, enT2, enT3, enT4,
-	input Irdecod_implicitSp, Irdecod_rxIsDt, Irdecod_ryIsDt, Irdecod_rxIsUsp, Irdecod_rxIsMovem, Irdecod_movemPreDecr,
-	input Irdecod_isByte, Irdecod_rxIsAreg, Irdecod_ryIsAreg, Nanod_busByte, Nanod_noLowByte, Nanod_noHighByte, Nanod_ftu2Dbl,
-	input Nanod_ftu2Abl, Nanod_abl2Pren, Nanod_updPren, Nanod_ftu2Ccr, Nanod_auClkEn, Nanod_noSpAlign, Nanod_todbin, Nanod_toIrc,
-	input Nanod_abh2Ath, Nanod_dbh2Ath, Nanod_ath2Dbh, Nanod_ath2Abh, Nanod_dbl2Atl, Nanod_db2Aob, Nanod_ab2Aob, Nanod_au2Aob,
-	input Nanod_aob2Ab, Nanod_abh2reg, Nanod_abl2reg, Nanod_reg2abl, Nanod_reg2abh, Nanod_dbh2reg, Nanod_dbl2reg, Nanod_reg2dbl,
-	input Nanod_reg2dbh, Nanod_abl2Atl, Nanod_atl2Abl, Nanod_atl2Dbl, Nanod_ssp, Nanod_rxlDbl, Nanod_rxh2dbh, Nanod_rxh2abh,
-	input Nanod_dbl2rxl, Nanod_dbh2rxh, Nanod_rxl2db, Nanod_rxl2ab, Nanod_abl2rxl, Nanod_abh2rxh, Nanod_dbh2ryh, Nanod_abh2ryh,
-	input Nanod_ryl2db, Nanod_ryl2ab, Nanod_ryh2dbh, Nanod_ryh2abh, Nanod_dbl2ryl, Nanod_abl2ryl, Nanod_pchdbh, Nanod_pcldbl,
-	input Nanod_pclabl, Nanod_pchabh, Nanod_rz, Nanod_aluActrl, Nanod_aluInit, Nanod_aluFinish, Nanod_abd2Dcr, Nanod_dcr2Dbd,
-	input Nanod_dbd2Alue, Nanod_alue2Dbd, Nanod_dbd2Alub, Nanod_abd2Alub, Nanod_alu2Dbd, Nanod_alu2Abd, Nanod_au2Db, Nanod_au2Ab,
-	input Nanod_au2Pc, Nanod_dbin2Abd, Nanod_dbin2Dbd, Nanod_extDbh, Nanod_extAbh, Nanod_ablAbd, Nanod_ablAbh, Nanod_dblDbd, Nanod_dblDbh,
-	input [2:0] Irdecod_rx, Irdecod_ry,
+	input s_nanod Nanod, input s_irdecod Irdecod,
 	input [15:0] Ird,			// ALU row (and others) decoder needs it	
-	input pswS, Nanod_abdIsByte,
-	input [2:0] Nanod_auCntrl,
-	input [1:0] Nanod_dobCtrl,
-	input [2:0] Nanod_aluColumn,
-	input [1:0] Nanod_aluDctrl,
+	input pswS,
 	input [15:0] ftu,
 	input [15:0] iEdb,
 	
@@ -1181,14 +1183,13 @@ localparam REG_DT = 17;
 		But the simulator doesn't realize (it can't) that the same value is substracting from itself,
 		and that the result should be zero even when it's 'X - 'X.
 	*/
-`ifndef VERILATOR	
+	
 	initial begin
 		for( int i = 0; i < 18; i++) begin
 			regs68L[i] <= '0;
 			regs68H[i] <= '0;
 		end
 	end
-`endif	
 	
 	// For simulation display only
 	wire [31:0] SSP = { regs68H[REG_SSP], regs68L[REG_SSP]};
@@ -1240,31 +1241,31 @@ localparam REG_DT = 17;
 	logic rxIsSp, ryIsSp;
 	logic rxIsAreg, ryIsAreg;
 	
-	always @* begin
+	always_comb begin
 	
 		// Unique IF !!
-		if( Nanod_ssp) begin
+		if( Nanod.ssp) begin
 			rxMux = REG_SSP;
 			rxIsSp = 1'b1;
-			rxReg = 4'd0; // X in the original
+			rxReg = 1'bX;
 		end
-		else if( Irdecod_rxIsUsp) begin
+		else if( Irdecod.rxIsUsp) begin
 			rxMux = REG_USP;
 			rxIsSp = 1'b1;
-			rxReg = 4'd0; // X in the original
+			rxReg = 1'bX;
 		end
-		else if( Irdecod_rxIsDt & !Irdecod_implicitSp) begin
+		else if( Irdecod.rxIsDt & !Irdecod.implicitSp) begin
 			rxMux = REG_DT;
 			rxIsSp = 1'b0;
-			rxReg = 4'd0; // X in the original
+			rxReg = 1'bX;
 		end
 		else begin
-			if( Irdecod_implicitSp)
+			if( Irdecod.implicitSp)
 				rxReg = 15;
-			else if( Irdecod_rxIsMovem)
+			else if( Irdecod.rxIsMovem)
 				rxReg = movemRx;
 			else
-				rxReg = { Irdecod_rxIsAreg, Irdecod_rx};
+				rxReg = { Irdecod.rxIsAreg, Irdecod.rx};
 				
 			if( (& rxReg)) begin
 				rxMux = pswS ? REG_SSP : 15;
@@ -1277,13 +1278,13 @@ localparam REG_DT = 17;
 		end
 
 		// RZ has higher priority!		
-		if( Irdecod_ryIsDt & !Nanod_rz) begin
+		if( Irdecod.ryIsDt & !Nanod.rz) begin
 			ryMux = REG_DT;
 			ryIsSp = 1'b0;
 			ryReg = 'X;
 		end
 		else begin
-			ryReg = Nanod_rz ? Irc[15:12] : {Irdecod_ryIsAreg, Irdecod_ry};
+			ryReg = Nanod.rz ? Irc[15:12] : {Irdecod.ryIsAreg, Irdecod.ry};
 			ryIsSp = (& ryReg);
 			if( ryIsSp & pswS)			// No implicit SP on RY
 				ryMux = REG_SSP;
@@ -1293,9 +1294,9 @@ localparam REG_DT = 17;
 					
 	end	
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT4) begin
-			byteNotSpAlign <= Irdecod_isByte & ~(Nanod_rxlDbl ? rxIsSp : ryIsSp);
+			byteNotSpAlign <= Irdecod.isByte & ~(Nanod.rxlDbl ? rxIsSp : ryIsSp);
 				
 			actualRx <= rxMux;
 			actualRy <= ryMux;
@@ -1305,85 +1306,85 @@ localparam REG_DT = 17;
 		end
 		
 		if( enT4)
-			abdIsByte <= Nanod_abdIsByte & Irdecod_isByte;
+			abdIsByte <= Nanod.abdIsByte & Irdecod.isByte;
 	end
 			
 	// Set RX/RY low word to which bus segment is connected.
 		
-	wire ryl2Abl = Nanod_ryl2ab & (ryIsAreg | Nanod_ablAbd);
-	wire ryl2Abd = Nanod_ryl2ab & (~ryIsAreg | Nanod_ablAbd);
-	wire ryl2Dbl = Nanod_ryl2db & (ryIsAreg | Nanod_dblDbd);
-	wire ryl2Dbd = Nanod_ryl2db & (~ryIsAreg | Nanod_dblDbd);
+	wire ryl2Abl = Nanod.ryl2ab & (ryIsAreg | Nanod.ablAbd);
+	wire ryl2Abd = Nanod.ryl2ab & (~ryIsAreg | Nanod.ablAbd);
+	wire ryl2Dbl = Nanod.ryl2db & (ryIsAreg | Nanod.dblDbd);
+	wire ryl2Dbd = Nanod.ryl2db & (~ryIsAreg | Nanod.dblDbd);
 
-	wire rxl2Abl = Nanod_rxl2ab & (rxIsAreg | Nanod_ablAbd);
-	wire rxl2Abd = Nanod_rxl2ab & (~rxIsAreg | Nanod_ablAbd);
-	wire rxl2Dbl = Nanod_rxl2db & (rxIsAreg | Nanod_dblDbd);
-	wire rxl2Dbd = Nanod_rxl2db & (~rxIsAreg | Nanod_dblDbd);
+	wire rxl2Abl = Nanod.rxl2ab & (rxIsAreg | Nanod.ablAbd);
+	wire rxl2Abd = Nanod.rxl2ab & (~rxIsAreg | Nanod.ablAbd);
+	wire rxl2Dbl = Nanod.rxl2db & (rxIsAreg | Nanod.dblDbd);
+	wire rxl2Dbd = Nanod.rxl2db & (~rxIsAreg | Nanod.dblDbd);
 	
 	// Buses. Main mux
 	
 	logic abhIdle, ablIdle, abdIdle;
 	logic dbhIdle, dblIdle, dbdIdle;
 	
-	always @* begin
+	always_comb begin
 		{abhIdle, ablIdle, abdIdle} = '0;
 		{dbhIdle, dblIdle, dbdIdle} = '0;
 
-		case( 1'b1)
+		unique case( 1'b1)
 		ryl2Dbd:				dbdMux = regs68L[ actualRy];
 		rxl2Dbd:				dbdMux = regs68L[ actualRx];
-		Nanod_alue2Dbd:			dbdMux = alue;
-		Nanod_dbin2Dbd:			dbdMux = dbin;
-		Nanod_alu2Dbd:			dbdMux = aluOut;
-		Nanod_dcr2Dbd:			dbdMux = dcrOutput;
+		Nanod.alue2Dbd:			dbdMux = alue;
+		Nanod.dbin2Dbd:			dbdMux = dbin;
+		Nanod.alu2Dbd:			dbdMux = aluOut;
+		Nanod.dcr2Dbd:			dbdMux = dcrOutput;
 		default: begin			dbdMux = 'X;	dbdIdle = 1'b1;				end
 		endcase
 	
-		case( 1'b1)
+		unique case( 1'b1)
 		rxl2Dbl:				dblMux = regs68L[ actualRx];
 		ryl2Dbl:				dblMux = regs68L[ actualRy];
-		Nanod_ftu2Dbl:			dblMux = ftu;
-		Nanod_au2Db:			dblMux = auReg[15:0];
-		Nanod_atl2Dbl:			dblMux = Atl;
+		Nanod.ftu2Dbl:			dblMux = ftu;
+		Nanod.au2Db:			dblMux = auReg[15:0];
+		Nanod.atl2Dbl:			dblMux = Atl;
 		Pcl2Dbl:				dblMux = PcL;
 		default: begin			dblMux = 'X;	dblIdle = 1'b1;				end
 		endcase
 			
-		case( 1'b1)
-		Nanod_rxh2dbh:			dbhMux = regs68H[ actualRx];
-		Nanod_ryh2dbh:			dbhMux = regs68H[ actualRy];
-		Nanod_au2Db:			dbhMux = auReg[31:16];
-		Nanod_ath2Dbh:			dbhMux = Ath;
+		unique case( 1'b1)
+		Nanod.rxh2dbh:			dbhMux = regs68H[ actualRx];
+		Nanod.ryh2dbh:			dbhMux = regs68H[ actualRy];
+		Nanod.au2Db:			dbhMux = auReg[31:16];
+		Nanod.ath2Dbh:			dbhMux = Ath;
 		Pch2Dbh:				dbhMux = PcH;
 		default: begin			dbhMux = 'X;	dbhIdle = 1'b1;				end
 		endcase
 
-		case( 1'b1)
+		unique case( 1'b1)
 		ryl2Abd:				abdMux = regs68L[ actualRy];
 		rxl2Abd:				abdMux = regs68L[ actualRx];
-		Nanod_dbin2Abd:			abdMux = dbin;
-		Nanod_alu2Abd:			abdMux = aluOut;
+		Nanod.dbin2Abd:			abdMux = dbin;
+		Nanod.alu2Abd:			abdMux = aluOut;
 		default: begin			abdMux = 'X;	abdIdle = 1'b1;				end
 		endcase
 
-		case( 1'b1)
+		unique case( 1'b1)
 		Pcl2Abl:				ablMux = PcL;
 		rxl2Abl:				ablMux = regs68L[ actualRx];
 		ryl2Abl:				ablMux = regs68L[ actualRy];
-		Nanod_ftu2Abl:			ablMux = ftu;
-		Nanod_au2Ab:			ablMux = auReg[15:0];
-		Nanod_aob2Ab:			ablMux = aob[15:0];
-		Nanod_atl2Abl:			ablMux = Atl;
+		Nanod.ftu2Abl:			ablMux = ftu;
+		Nanod.au2Ab:			ablMux = auReg[15:0];
+		Nanod.aob2Ab:			ablMux = aob[15:0];
+		Nanod.atl2Abl:			ablMux = Atl;
 		default: begin			ablMux = 'X;	ablIdle = 1'b1;				end
 		endcase
 			
-		case( 1'b1)		
+		unique case( 1'b1)		
 		Pch2Abh:				abhMux = PcH;
-		Nanod_rxh2abh:			abhMux = regs68H[ actualRx];
-		Nanod_ryh2abh:			abhMux = regs68H[ actualRy];
-		Nanod_au2Ab:			abhMux = auReg[31:16];
-		Nanod_aob2Ab:			abhMux = aob[31:16];
-		Nanod_ath2Abh:			abhMux = Ath;
+		Nanod.rxh2abh:			abhMux = regs68H[ actualRx];
+		Nanod.ryh2abh:			abhMux = regs68H[ actualRy];
+		Nanod.au2Ab:			abhMux = auReg[31:16];
+		Nanod.aob2Ab:			abhMux = aob[31:16];
+		Nanod.ath2Abh:			abhMux = Ath;
 		default: begin			abhMux = 'X;	abhIdle = 1'b1;				end
 		endcase
 			
@@ -1396,7 +1397,7 @@ localparam REG_DT = 17;
 	reg [15:0] preAbh, preAbl, preAbd;
 	reg [15:0] preDbh, preDbl, preDbd;
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 
 		// Register first level mux at T1		
 		if( enT1) begin
@@ -1409,7 +1410,7 @@ localparam REG_DT = 17;
 		// In some cases this is not true and the segment is really idle without any destination. But then it doesn't matter.
 		
 		if( enT2) begin
-			if( Nanod_extAbh)
+			if( Nanod.extAbh)
 				Abh <= { 16{ ablIdle ? preAbd[ 15] : preAbl[ 15] }};
 			else if( abhIdle)
 				Abh <= ablIdle ? preAbd : preAbl;
@@ -1419,11 +1420,11 @@ localparam REG_DT = 17;
 			if( ~ablIdle)
 				Abl <= preAbl;
 			else
-				Abl <= Nanod_ablAbh ? preAbh : preAbd;
+				Abl <= Nanod.ablAbh ? preAbh : preAbd;
 
 			Abd <= ~abdIdle ? preAbd : ablIdle ? preAbh : preAbl;
 
-			if( Nanod_extDbh)
+			if( Nanod.extDbh)
 				Dbh <= { 16{ dblIdle ? preDbd[ 15] : preDbl[ 15] }};
 			else if( dbhIdle)
 				Dbh <= dblIdle ? preDbd : preDbl;
@@ -1433,7 +1434,7 @@ localparam REG_DT = 17;
 			if( ~dblIdle)
 				Dbl <= preDbl;
 			else
-				Dbl <= Nanod_dblDbh ? preDbh : preDbd;
+				Dbl <= Nanod.dblDbh ? preDbh : preDbd;
 
 			Dbd <= ~dbdIdle ? preDbd: dblIdle ? preDbh : preDbl;
 			
@@ -1454,17 +1455,17 @@ localparam REG_DT = 17;
 
 	// We need to take directly from first level muxes that are updated and T1
 			
-	wire au2Aob = Nanod_au2Aob | (Nanod_au2Db & Nanod_db2Aob);
+	wire au2Aob = Nanod.au2Aob | (Nanod.au2Db & Nanod.db2Aob);
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		// UNIQUE IF !
 		
 		if( enT1 & au2Aob)		// From AU we do can on T1
 			aob <= auReg;
 		else if( enT2) begin
-			if( Nanod_db2Aob)
+			if( Nanod.db2Aob)
 				aob <= { preDbh, ~dblIdle ? preDbl : preDbd};
-			else if( Nanod_ab2Aob)
+			else if( Nanod.ab2Aob)
 				aob <= { preAbh, ~ablIdle ? preAbl : preAbd};
 		end
 	end
@@ -1479,16 +1480,16 @@ localparam REG_DT = 17;
 	// Old Modelsim bug. Doesn't update ouput always. Need excplicit sensitivity list !?
 	// always @( Nanod.auCntrl) begin
 	
-	always @* begin
-		case( Nanod_auCntrl)
+	always_comb begin
+		unique case( Nanod.auCntrl)
 		3'b000:		auInpMux = 0;
-		3'b001:		auInpMux = byteNotSpAlign | Nanod_noSpAlign ? 1 : 2;		// +1/+2
+		3'b001:		auInpMux = byteNotSpAlign | Nanod.noSpAlign ? 1 : 2;		// +1/+2
 		3'b010:		auInpMux = -4;
 		3'b011:		auInpMux = { Abh, Abl};
 		3'b100:		auInpMux = 2;
 		3'b101:		auInpMux = 4;
 		3'b110:		auInpMux = -2;
-		3'b111:		auInpMux = byteNotSpAlign | Nanod_noSpAlign ? -1 : -2;	// -1/-2
+		3'b111:		auInpMux = byteNotSpAlign | Nanod.noSpAlign ? -1 : -2;	// -1/-2
 		default:	auInpMux = 'X;
 		endcase
 	end
@@ -1503,10 +1504,10 @@ localparam REG_DT = 17;
 	wire [31:0] auResult = {Dbh + auInpMux[31:16] + aulow[16], aulow[15:0]};
 // synthesis translate_on
 
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp)
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp)
 			auReg <= '0;
-		else if( enT3 & Nanod_auClkEn)
+		else if( enT3 & Nanod.auClkEn)
 			`ifdef SIMULBUGX32
 				auReg <= auResult;
 			`else
@@ -1517,33 +1518,33 @@ localparam REG_DT = 17;
 	
 	// Main A/D registers
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT3) begin
-			if( Nanod_dbl2rxl | Nanod_abl2rxl) begin
+			if( Nanod.dbl2rxl | Nanod.abl2rxl) begin
 				if( ~rxIsAreg) begin
-					if( Nanod_dbl2rxl)			regs68L[ actualRx] <= Dbd;
+					if( Nanod.dbl2rxl)			regs68L[ actualRx] <= Dbd;
 					else if( abdIsByte)			regs68L[ actualRx][7:0] <= Abd[7:0];
 					else						regs68L[ actualRx] <= Abd;
 				end
 				else
-					regs68L[ actualRx] <= Nanod_dbl2rxl ? Dbl : Abl;
+					regs68L[ actualRx] <= Nanod.dbl2rxl ? Dbl : Abl;
 			end
 				
-			if( Nanod_dbl2ryl | Nanod_abl2ryl) begin
+			if( Nanod.dbl2ryl | Nanod.abl2ryl) begin
 				if( ~ryIsAreg) begin
-					if( Nanod_dbl2ryl)			regs68L[ actualRy] <= Dbd;
+					if( Nanod.dbl2ryl)			regs68L[ actualRy] <= Dbd;
 					else if( abdIsByte)			regs68L[ actualRy][7:0] <= Abd[7:0];
 					else						regs68L[ actualRy] <= Abd;				
 				end
 				else
-					regs68L[ actualRy] <= Nanod_dbl2ryl ? Dbl : Abl;
+					regs68L[ actualRy] <= Nanod.dbl2ryl ? Dbl : Abl;
 			end
 			
 			// High registers are easier. Both A & D on the same buses, and not byte ops.
-			if( Nanod_dbh2rxh | Nanod_abh2rxh)
-				regs68H[ actualRx] <= Nanod_dbh2rxh ? Dbh : Abh;
-			if( Nanod_dbh2ryh | Nanod_abh2ryh)
-				regs68H[ actualRy] <= Nanod_dbh2ryh ? Dbh : Abh;
+			if( Nanod.dbh2rxh | Nanod.abh2rxh)
+				regs68H[ actualRx] <= Nanod.dbh2rxh ? Dbh : Abh;
+			if( Nanod.dbh2ryh | Nanod.abh2ryh)
+				regs68H[ actualRy] <= Nanod.dbh2ryh ? Dbh : Abh;
 				
 		end	
 	end
@@ -1551,8 +1552,8 @@ localparam REG_DT = 17;
 	// PC & AT
 	reg dbl2Pcl, dbh2Pch, abh2Pch, abl2Pcl;
 		
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset) begin
 			{ dbl2Pcl, dbh2Pch, abh2Pch, abl2Pcl } <= '0;
 			
 			Pcl2Dbl <= 1'b0;
@@ -1561,19 +1562,19 @@ localparam REG_DT = 17;
 			Pch2Abh <= 1'b0;
 		end
 		else if( enT4) begin				// Must latch on T4 !
-			dbl2Pcl <= Nanod_dbl2reg & Nanod_pcldbl;
-			dbh2Pch <= Nanod_dbh2reg & Nanod_pchdbh;
-			abh2Pch <= Nanod_abh2reg & Nanod_pchabh;
-			abl2Pcl <= Nanod_abl2reg & Nanod_pclabl;
+			dbl2Pcl <= Nanod.dbl2reg & Nanod.pcldbl;
+			dbh2Pch <= Nanod.dbh2reg & Nanod.pchdbh;
+			abh2Pch <= Nanod.abh2reg & Nanod.pchabh;
+			abl2Pcl <= Nanod.abl2reg & Nanod.pclabl;
 			
-			Pcl2Dbl <= Nanod_reg2dbl & Nanod_pcldbl;
-			Pch2Dbh <= Nanod_reg2dbh & Nanod_pchdbh;
-			Pcl2Abl <= Nanod_reg2abl & Nanod_pclabl;
-			Pch2Abh <= Nanod_reg2abh & Nanod_pchabh;
+			Pcl2Dbl <= Nanod.reg2dbl & Nanod.pcldbl;
+			Pch2Dbh <= Nanod.reg2dbh & Nanod.pchdbh;
+			Pcl2Abl <= Nanod.reg2abl & Nanod.pclabl;
+			Pch2Abh <= Nanod.reg2abh & Nanod.pchabh;
 		end
 		
 		// Unique IF !!!
-		if( enT1 & Nanod_au2Pc)
+		if( enT1 & Nanod.au2Pc)
 			PcL <= auReg[15:0];
 		else if( enT3) begin
 			if( dbl2Pcl)
@@ -1583,7 +1584,7 @@ localparam REG_DT = 17;
 		end
 			
 		// Unique IF !!!
-		if( enT1 & Nanod_au2Pc)
+		if( enT1 & Nanod.au2Pc)
 			PcH <= auReg[31:16];
 		else if( enT3) begin
 			if( dbh2Pch)
@@ -1594,17 +1595,17 @@ localparam REG_DT = 17;
 
 		// Unique IF !!!
 		if( enT3) begin
-			if( Nanod_dbl2Atl)
+			if( Nanod.dbl2Atl)
 				Atl <= Dbl;
-			else if( Nanod_abl2Atl)
+			else if( Nanod.abl2Atl)
 				Atl <= Abl;
 		end
 
 		// Unique IF !!!
 		if( enT3) begin
-			if( Nanod_abh2Ath)
+			if( Nanod.abh2Ath)
 				Ath <= Abh;
-			else if( Nanod_dbh2Ath)
+			else if( Nanod.dbh2Ath)
 				Ath <= Dbh;
 		end
 
@@ -1620,14 +1621,14 @@ localparam REG_DT = 17;
 	assign prenEmpty = (~| prenLatch);	
 	pren rmPren( .mask( prenLatch), .hbit (prHbit));
 
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		// Cheating: PREN always loaded from DBIN
 		// Must be on T1 to branch earlier if reg mask is empty!
-		if( enT1 & Nanod_abl2Pren)
+		if( enT1 & Nanod.abl2Pren)
 			prenLatch <= dbin;
-		else if( enT3 & Nanod_updPren) begin
+		else if( enT3 & Nanod.updPren) begin
 			prenLatch [prHbit] <= 1'b0;
-			movemRx <= Irdecod_movemPreDecr ? ~prHbit : prHbit;
+			movemRx <= Irdecod.movemPreDecr ? ~prHbit : prHbit;
 		end
 	end
 	
@@ -1637,10 +1638,10 @@ localparam REG_DT = 17;
 	wire [3:0] dcrInput = abdIsByte ? { 1'b0, Abd[ 2:0]} : Abd[ 3:0];
 	onehotEncoder4 dcrDecoder( .bin( dcrInput), .bitMap( dcrCode));
 	
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp)
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp)
 			dcr4 <= '0;
-		else if( enT3 & Nanod_abd2Dcr) begin
+		else if( enT3 & Nanod.abd2Dcr) begin
 			dcrOutput <= dcrCode;
 			dcr4 <= Abd[4];
 		end
@@ -1649,25 +1650,25 @@ localparam REG_DT = 17;
 	// ALUB
 	reg [15:0] alub;
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT3) begin
 			// UNIQUE IF !!
-			if( Nanod_dbd2Alub)
+			if( Nanod.dbd2Alub)
 				alub <= Dbd;
-			else if( Nanod_abd2Alub)
+			else if( Nanod.abd2Alub)
 				alub <= Abd;				// abdIsByte affects this !!??
 		end
 	end
 	
-	wire alueClkEn = enT3 & Nanod_dbd2Alue;
+	wire alueClkEn = enT3 & Nanod.dbd2Alue;
 
 	// DOB/DBIN/IRC
 	
 	logic [15:0] dobInput;
-	wire dobIdle = (~| Nanod_dobCtrl);
+	wire dobIdle = (~| Nanod.dobCtrl);
 	
-	always @* begin
-		case (Nanod_dobCtrl)
+	always_comb begin
+		unique case (Nanod.dobCtrl)
 		NANO_DOB_ADB:		dobInput = Abd;
 		NANO_DOB_DBD:		dobInput = Dbd;
 		NANO_DOB_ALU:		dobInput = aluOut;
@@ -1675,19 +1676,18 @@ localparam REG_DT = 17;
 		endcase
 	end
 
-	dataIo dataIo( .Clks_clk, .Clks_enPhi2, .enT1, .enT2, .enT3, .enT4,
-			.iEdb, .dobIdle, .dobInput, .aob0, .Irdecod_isByte, .Nanod_busByte,
-			.Nanod_noLowByte, .Nanod_noHighByte, .Irc, .dbin, .oEdb, .Nanod_todbin,
-			.Nanod_toIrc);
+	dataIo dataIo( .Clks, .enT1, .enT2, .enT3, .enT4, .Nanod, .Irdecod,
+			.iEdb, .dobIdle, .dobInput, .aob0,
+			.Irc, .dbin, .oEdb);
 
 	fx68kAlu alu(
-		.clk( Clks_clk), .pwrUp( Clks_pwrUp), .enT1, .enT3, .enT4,
+		.clk( Clks.clk), .pwrUp( Clks.pwrUp), .enT1, .enT3, .enT4,
 		.ird( Ird),
-		.aluColumn( Nanod_aluColumn), .aluAddrCtrl( Nanod_aluActrl),
-		.init( Nanod_aluInit), .finish( Nanod_aluFinish), .aluIsByte( Irdecod_isByte),
-		.ftu2Ccr( Nanod_ftu2Ccr),
+		.aluColumn( Nanod.aluColumn), .aluAddrCtrl( Nanod.aluActrl),
+		.init( Nanod.aluInit), .finish( Nanod.aluFinish), .aluIsByte( Irdecod.isByte),
+		.ftu2Ccr( Nanod.ftu2Ccr),
 		.alub, .ftu, .alueClkEn, .alue,
-		.aluDataCtrl( Nanod_aluDctrl), .iDataBus( Dbd), .iAddrBus(Abd),
+		.aluDataCtrl( Nanod.aluDctrl), .iDataBus( Dbd), .iAddrBus(Abd),
 		.ze, .aluOut, .ccr);
 
 endmodule
@@ -1701,9 +1701,9 @@ endmodule
 // Input is latched async at the EDB register.
 // We capture directly from the external data bus to the internal registers (IRC & DBIN) on PHI2, starting the external S7 phase, at a T4 internal period.
 
-module dataIo( input Clks_clk, input Clks_enPhi2,
-	input enT1, enT2, enT3, enT4, Irdecod_isByte, Nanod_busByte, Nanod_noLowByte,
-	input Nanod_noHighByte, Nanod_todbin, Nanod_toIrc,
+module dataIo( input s_clks Clks,
+	input enT1, enT2, enT3, enT4,
+	input s_nanod Nanod, input s_irdecod Irdecod,
 	input [15:0] iEdb,
 	input aob0,
 
@@ -1727,7 +1727,7 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 	reg dbinNoLow, dbinNoHigh;
 	reg byteMux, isByte_T4;
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 	
 		// Byte mux control. Can't latch at T1. AOB might be not ready yet.
 		// Must latch IRD decode at T1 (or T4). Then combine and latch only at T3.
@@ -1735,12 +1735,12 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 		// Can't latch at T3, a new IRD might be loaded already at T1.	
 		// Ok to latch at T4 if combination latched then at T3
 		if( enT4)
-			isByte_T4 <= Irdecod_isByte;	// Includes MOVEP from mem, we could OR it here
+			isByte_T4 <= Irdecod.isByte;	// Includes MOVEP from mem, we could OR it here
 
 		if( enT3) begin
-			dbinNoHigh <= Nanod_noHighByte;
-			dbinNoLow <= Nanod_noLowByte;
-			byteMux <= Nanod_busByte & isByte_T4 & ~aob0;
+			dbinNoHigh <= Nanod.noHighByte;
+			dbinNoLow <= Nanod.noLowByte;
+			byteMux <= Nanod.busByte & isByte_T4 & ~aob0;
 		end
 		
 		if( enT1) begin
@@ -1749,16 +1749,16 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 			xToIrc <= 1'b0;			
 		end
 		else if( enT3) begin
-			xToDbin <= Nanod_todbin;
-			xToIrc <= Nanod_toIrc;
+			xToDbin <= Nanod.todbin;
+			xToIrc <= Nanod.toIrc;
 		end
 
 		// Capture on T4 of the next ucycle
 		// If there are wait states, we keep capturing every PHI2 until the next T1
 		
-		if( xToIrc & Clks_enPhi2)
+		if( xToIrc & Clks.enPhi2)
 			Irc <= iEdb;
-		if( xToDbin & Clks_enPhi2) begin
+		if( xToDbin & Clks.enPhi2) begin
 			// Original connects both halves of EDB.
 			if( ~dbinNoLow)
 				dbin[ 7:0] <= byteMux ? iEdb[ 15:8] : iEdb[7:0];
@@ -1770,7 +1770,7 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 	// DOB
 	logic byteCycle;	
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		// Originaly on T1. Transfer to internal EDB also on T1 (stays enabled upto the next T1). But only on T4 (S3) output enables.
 		// It is safe to do on T3, then, but control signals if derived from IRD must be registered.
 		// Originally control signals are not registered.
@@ -1778,12 +1778,12 @@ module dataIo( input Clks_clk, input Clks_enPhi2,
 		// Wait states don't affect DOB operation that is done at the start of the bus cycle. 
 
 		if( enT4)
-			byteCycle <= Nanod_busByte & Irdecod_isByte;		// busIsByte but not MOVEP
+			byteCycle <= Nanod.busByte & Irdecod.isByte;		// busIsByte but not MOVEP
 		
 		// Originally byte low/high interconnect is done at EDB, not at DOB.
 		if( enT3 & ~dobIdle) begin
-			dob[7:0] <= Nanod_noLowByte ? dobInput[15:8] : dobInput[ 7:0];
-			dob[15:8] <= (byteCycle | Nanod_noHighByte) ? dobInput[ 7:0] : dobInput[15:8];
+			dob[7:0] <= Nanod.noLowByte ? dobInput[15:8] : dobInput[ 7:0];
+			dob[15:8] <= (byteCycle | Nanod.noHighByte) ? dobInput[ 7:0] : dobInput[15:8];
 		end
 	end
 	assign oEdb = dob;
@@ -1827,7 +1827,7 @@ module uaddrDecode(
 	function [3:0] eaDecode;
 	input [5:0] eaBits;
 	begin
-	case( eaBits[ 5:3])
+	unique case( eaBits[ 5:3])
 	3'b111:
 		case( eaBits[ 2:0])
 		3'b000:   eaDecode = 7;            // Absolute short
@@ -1838,7 +1838,7 @@ module uaddrDecode(
 		default:  eaDecode = 12;           // Invalid
 		endcase
          
-	default:   eaDecode = {1'b0, eaBits[5:3]};      // Register based EAs
+	default:   eaDecode = eaBits[5:3];      // Register based EAs
 	endcase
 	end
 	endfunction
@@ -1855,8 +1855,8 @@ module uaddrDecode(
 	STOP
 	*/
 	
-	always @* begin
-		case( lineBmap)
+	always_comb begin
+		unique case( lineBmap)
            
 		// ori/andi/eori SR      
 		'h01:   isPriv = ((opcode & 16'hf5ff) == 16'h007c);
@@ -1887,7 +1887,7 @@ endmodule
 
 // bin to one-hot, 4 bits to 16-bit bitmap
 module onehotEncoder4( input [3:0] bin, output reg [15:0] bitMap);
-	always @* begin
+	always_comb begin
 	case( bin)
 		'b0000:   bitMap = 16'h0001;
 		'b0001:   bitMap = 16'h0002;
@@ -1937,8 +1937,7 @@ endmodule
 
 // Microcode sequencer
 
-module sequencer( input Clks_clk, input Clks_extReset,
-	input enT3,
+module sequencer( input s_clks Clks, input enT3,
 	input [UROM_WIDTH-1:0] microLatch,
 	input A0Err, BerrA, busAddrErr, Spuria, Avia,
 	input Tpend, intPend, isIllegal, isPriv, excRst, isLineA, isLineF,
@@ -1957,7 +1956,7 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	wire A0Sel;
 	wire inGrp0Exc;
 	
-	// assign nma = Clks_extReset ? RSTP0_NMA : (A0Err ? BSER1_NMA : uNma);
+	// assign nma = Clks.extReset ? RSTP0_NMA : (A0Err ? BSER1_NMA : uNma);
 	// assign nma = A0Err ? (a0Rst ? RSTP0_NMA : BSER1_NMA) : uNma;
 	
     // word type I: 16 15 14 13 12 11 10 09 08 07 06 05 04 03 02 01 00
@@ -1967,20 +1966,20 @@ module sequencer( input Clks_clk, input Clks_extReset,
 
 	// Group 0 exception.
 	// Separated block from regular NMA. Otherwise simulation might depend on order of assigments.
-	always @* begin
+	always_comb begin
 		if( A0Err) begin
 			if( a0Rst)					// Reset
-				nma = {8'b0, RSTP0_NMA};
+				nma = RSTP0_NMA;
 			else if( inGrp0Exc)			// Double fault
-				nma = {8'b0, HALT1_NMA};
+				nma = HALT1_NMA;
 			else						// Bus or address error
-				nma = {8'b0, BSER1_NMA};
+				nma = BSER1_NMA;
 		end
 		else
 			nma = uNma;
 	end
 
-	always @* begin
+	always_comb begin
 		// Format II (conditional) or I (direct branch)
 		if( microLatch[1])
 			uNma = { microLatch[ 14:13], c0c1, microLatch[ 10:7], microLatch[ 12:11]};		
@@ -2004,8 +2003,8 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	logic ccTest;
 	wire [4:0] cbc = microLatch[ 6:2];			// CBC bits
 	
-	always @* begin
-		case( cbc)
+	always_comb begin
+		unique case( cbc)
 		'h0:    c0c1 = {i11, i11};						// W/L offset EA, from IRC
 
 		'h1:    c0c1 = (au05z) ? 2'b01 : 2'b11;			// Updated on T3
@@ -2076,8 +2075,8 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	end
 	
 	// CCR conditional
-	always @* begin
-		case( Ird[ 11:8])		
+	always_comb begin
+		unique case( Ird[ 11:8])		
 		'h0: ccTest = 1'b1;						// T
 		'h1: ccTest = 1'b0;						// F
 		'h2: ccTest = ~psw[ CF] & ~psw[ ZF];	// HI
@@ -2111,7 +2110,7 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	
 	assign inGrp0Exc = rExcRst | rExcBusErr | rExcAdrErr;
 	
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( grp0LatchEn & enT3) begin
 			rExcRst <= excRst;
 			rExcBusErr <= BerrA;
@@ -2135,12 +2134,12 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	end
 
 	// exception priority
-	always @* begin
-		grp1Nma = {1'b0, TRAC1_NMA};
+	always_comb begin
+		grp1Nma = TRAC1_NMA;
 		if( rExcRst)
 			tvn = '0;							// Might need to change that to signal in exception
 		else if( rExcBusErr | rExcAdrErr)
-			tvn = { 3'b1, rExcAdrErr};
+			tvn = { 1'b1, rExcAdrErr};
 			
 		// Seudo group 0 exceptions. Just for updating TVN
 		else if( rSpurious | rAutovec)
@@ -2150,10 +2149,10 @@ module sequencer( input Clks_clk, input Clks_extReset,
 			tvn = 9;
 		else if( rInterrupt) begin
 			tvn = TVN_INTERRUPT;
-			grp1Nma = {1'b0, ITLX1_NMA};
+			grp1Nma = ITLX1_NMA;
 		end
 		else begin
-			case( 1'b1)					// Can't happen more than one of these
+			unique case( 1'b1)					// Can't happen more than one of these
 			rIllegal:			tvn = 4;
 			rPriv:				tvn = 8;
 			rLineA:				tvn = 10;
@@ -2165,8 +2164,8 @@ module sequencer( input Clks_clk, input Clks_extReset,
 	
 	assign A0Sel = rIllegal | rLineF | rLineA | rPriv | rTrace | rInterrupt;
 	
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset)
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset)
 			a0Rst <= 1'b1;
 		else if( enT3)
 			a0Rst <= 1'b0;
@@ -2179,25 +2178,14 @@ endmodule
 // DMA/BUS Arbitration
 //
 
-module busArbiter( input Clks_clk, input Clks_enPhi2,
-		input Clks_extReset, input Clks_enPhi1,
+module busArbiter( input s_clks Clks,
 		input BRi, BgackI, Halti, bgBlock,
 		output busAvail,
 		output logic BGn);
 		
-	reg [2:0] dmaPhase, next;
+	enum int unsigned { DRESET = 0, DIDLE, D1, D_BR, D_BA, D_BRA, D3, D2} dmaPhase, next;
 
-	localparam [2:0]
-	DRESET = 0, 
-	DIDLE = 1, 
-	D1 = 2, 
-	D_BR = 3, 
-	D_BA = 4, 
-	D_BRA = 5, 
-	D3 = 6, 
-	D2 = 7;
-	
-	always @* begin
+	always_comb begin
 		case(dmaPhase)
 		DRESET:	next = DIDLE;
 		DIDLE:	begin
@@ -2210,6 +2198,7 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 				else
 					next = DIDLE;
 				end
+
 		D_BA:	begin							// Loop while only BGACK asserted, BG negated here
 				if( ~BRi & !bgBlock)
 					next = D3;
@@ -2218,8 +2207,10 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 				else
 					next = DIDLE;
 				end
+				
 		D1:		next = D_BR;							// Loop while only BR asserted
-		D_BR:	next = ~BRi & BgackI ? D_BR : D_BA;		// No direct path to IDLE !	
+		D_BR:	next = ~BRi & BgackI ? D_BR : D_BA;		// No direct path to IDLE !
+		
 		D3:		next = D_BRA;
 		D_BRA:	begin						// Loop while both BR and BGACK asserted
 				case( {BgackI, BRi} )
@@ -2240,8 +2231,8 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 	end
 		
 	logic granting;
-	always @* begin
-		case( next)
+	always_comb begin
+		unique case( next)
 		D1, D3, D_BR, D_BRA:	granting = 1'b1;
 		default:				granting = 1'b0;
 		endcase
@@ -2250,30 +2241,28 @@ module busArbiter( input Clks_clk, input Clks_enPhi2,
 	reg rGranted;
 	assign busAvail = Halti & BRi & BgackI & ~rGranted;
 		
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset) begin
 			dmaPhase <= DRESET;
 			rGranted <= 1'b0;
 		end
-		else if( Clks_enPhi2) begin
+		else if( Clks.enPhi2) begin
 			dmaPhase <= next;
 			// Internal signal changed on PHI2
 			rGranted <= granting;
 		end
 
 		// External Output changed on PHI1
-		if( Clks_extReset)
+		if( Clks.extReset)
 			BGn <= 1'b1;
-		else if( Clks_enPhi1)
+		else if( Clks.enPhi1)
 			BGn <= ~rGranted;
 		
 	end
 			
 endmodule
 
-module busControl( input Clks_clk, input Clks_extReset, 
-		input Clks_pwrUp, input Clks_enPhi1, input Clks_enPhi2,
-		input enT1, input enT4,
+module busControl( input s_clks Clks, input enT1, input enT4,
 		input permStart, permStop, iStop,
 		input aob0,
 		input isWrite, isByte, isRmc,
@@ -2313,24 +2302,16 @@ module busControl( input Clks_clk, input Clks_extReset,
 	// It's BERR and HALT and not address error, and not read-modify cycle.
 	wire busRetry = ~busAddrErr & 1'b0;
 	
-	// enum int unsigned { SRESET = 0, SIDLE, S0, S2, S4, S6, SRMC_RES} busPhase, next;
-	localparam [2:0] SRESET = 0, 
-					 SIDLE = 1, 
-					 S0 = 2, 
-					 S2 = 3, 
-					 S4 = 4, 
-					 S6 = 5, 
-					 SRMC_RES = 6;
-	reg [2:0] busPhase, next;
+	enum int unsigned { SRESET = 0, SIDLE, S0, S2, S4, S6, SRMC_RES} busPhase, next;
 
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset)
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset)
 			busPhase <= SRESET;
-		else if( Clks_enPhi1)
+		else if( Clks.enPhi1)
 			busPhase <= next;
 	end
 	
-	always @* begin
+	always_comb begin
 		case( busPhase)
 		SRESET:		next = SIDLE;
 		SRMC_RES:	next = SIDLE;			// Single cycle special state when read phase of RMC reset
@@ -2363,7 +2344,7 @@ module busControl( input Clks_clk, input Clks_extReset,
 	wire bciClear = bcComplete & ~busRetry;
 	
 	// Reset on reset or (berr & berrDelay & (not halt or rmc) & not 6800 & in bus cycle) (and not PHI1)
-	assign bcReset = Clks_extReset | (addrOeDelay & BeDebounced & Vpai);
+	assign bcReset = Clks.extReset | (addrOeDelay & BeDebounced & Vpai);
 		
 	// Enable uclock only on S6 (S8 on Bus Error) or not bciPermStop
 	assign waitBusCycle = wendReg & !bcComplete;
@@ -2372,21 +2353,21 @@ module busControl( input Clks_clk, input Clks_extReset,
 	// Except that when that RMC phase aborted on bus error, it's asserted one cycle later!
 	assign bgBlock = ((busPhase == S0) & ASn) | (busPhase == SRMC_RES);
 	
-	always @( posedge Clks_clk) begin
-		if( Clks_extReset) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.extReset) begin
 			addrOe <= 1'b0;
 		end
-		else if( Clks_enPhi2 & ( busPhase == S0))			// From S1, whole bus cycle except S0
+		else if( Clks.enPhi2 & ( busPhase == S0))			// From S1, whole bus cycle except S0
 				addrOe <= 1'b1;
-		else if( Clks_enPhi1 & (busPhase == SRMC_RES))
+		else if( Clks.enPhi1 & (busPhase == SRMC_RES))
 			addrOe <= 1'b0;
-		else if( Clks_enPhi1 & ~isRmcReg & busEnding)
+		else if( Clks.enPhi1 & ~isRmcReg & busEnding)
 			addrOe <= 1'b0;
 			
-		if( Clks_enPhi1)
+		if( Clks.enPhi1)
 			addrOeDelay <= addrOe;
 		
-		if( Clks_extReset) begin
+		if( Clks.extReset) begin
 			rAS <= 1'b1;
 			rUDS <= 1'b1;
 			rLDS <= 1'b1;
@@ -2395,39 +2376,39 @@ module busControl( input Clks_clk, input Clks_extReset,
 		end
 		else begin
 
-			if( Clks_enPhi2 & isWriteReg & (busPhase == S2))
+			if( Clks.enPhi2 & isWriteReg & (busPhase == S2))
 				dataOe <= 1'b1;
-			else if( Clks_enPhi1 & (busEnding | (busPhase == SIDLE)) )
+			else if( Clks.enPhi1 & (busEnding | (busPhase == SIDLE)) )
 				dataOe <= 1'b0;
 						
-			if( Clks_enPhi1 & busEnding)
+			if( Clks.enPhi1 & busEnding)
 				rRWn <= 1'b1;
-			else if( Clks_enPhi1 & isWriteReg) begin
+			else if( Clks.enPhi1 & isWriteReg) begin
 				// Unlike LDS/UDS Asserted even in address error
 				if( (busPhase == S0) & isWriteReg)
 					rRWn <= 1'b0;
 			end
 
 			// AS. Actually follows addrOe half cycle later!
-			if( Clks_enPhi1 & (busPhase == S0))
+			if( Clks.enPhi1 & (busPhase == S0))
 				rAS <= 1'b0;
-			else if( Clks_enPhi2 & (busPhase == SRMC_RES))		// Bus error on read phase of RMC. Deasserted one cycle later
+			else if( Clks.enPhi2 & (busPhase == SRMC_RES))		// Bus error on read phase of RMC. Deasserted one cycle later
 				rAS <= 1'b1;			
-			else if( Clks_enPhi2 & bcComplete) // & ~SRMC_RES
+			else if( Clks.enPhi2 & bcComplete & ~SRMC_RES)
 				if( ~isRmcReg)									// Keep AS asserted on the IDLE phase of RMC
 					rAS <= 1'b1;
 			
-			if( Clks_enPhi1 & (busPhase == S0)) begin
+			if( Clks.enPhi1 & (busPhase == S0)) begin
 				if( ~isWriteReg & !busAddrErr) begin
 					rUDS <= ~(~bciByte | ~aob0);
 					rLDS <= ~(~bciByte | aob0);
 				end
 			end
-			else if( Clks_enPhi1 & isWriteReg & (busPhase == S2) & !busAddrErr) begin
+			else if( Clks.enPhi1 & isWriteReg & (busPhase == S2) & !busAddrErr) begin
 					rUDS <= ~(~bciByte | ~aob0);
 					rLDS <= ~(~bciByte | aob0);
 			end		
-			else if( Clks_enPhi2 & bcComplete) begin
+			else if( Clks.enPhi2 & bcComplete) begin
 				rUDS <= 1'b1;
 				rLDS <= 1'b1;
 			end
@@ -2445,15 +2426,15 @@ module busControl( input Clks_clk, input Clks_extReset,
 	// permStop also latched, but unconditionally on T1
 	
 	// Might make more sense to register this outside this module
-	always @( posedge Clks_clk) begin
+	always_ff @( posedge Clks.clk) begin
 		if( enT4) begin
 			isByteT4 <= isByte;
 		end
 	end
 	
 	// Bus Cycle Info Latch
-	always @( posedge Clks_clk) begin
-		if( Clks_pwrUp) begin
+	always_ff @( posedge Clks.clk) begin
+		if( Clks.pwrUp) begin
 			bcPend <= 1'b0;
 			wendReg <= 1'b0;	
 			isWriteReg <= 1'b0;
@@ -2461,7 +2442,7 @@ module busControl( input Clks_clk, input Clks_extReset,
 			isRmcReg <= 1'b0;		
 		end
 		
-		else if( Clks_enPhi2 & (bciClear | bcReset)) begin
+		else if( Clks.enPhi2 & (bciClear | bcReset)) begin
 			bcPend <= 1'b0;
 			wendReg <= 1'b0;
 		end
@@ -2493,7 +2474,7 @@ module uRom( input clk, input [UADDR_WIDTH-1:0] microAddr, output logic [UROM_WI
 		$readmemb("microrom.mem", uRam);
 	end
 	
-	always @( posedge clk) 
+	always_ff @( posedge clk) 
 		microOutput <= uRam[ microAddr];
 endmodule
 
@@ -2504,7 +2485,7 @@ module nanoRom( input clk, input [NADDR_WIDTH-1:0] nanoAddr, output logic [NANO_
 		$readmemb("nanorom.mem", nRam);
 	end
 	
-	always @( posedge clk) 
+	always_ff @( posedge clk) 
 		nanoOutput <= nRam[ nanoAddr];
 endmodule
 
