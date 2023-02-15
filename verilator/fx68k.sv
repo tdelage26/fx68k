@@ -23,7 +23,7 @@ localparam CF = 0, VF = 1, ZF = 2, NF = 3, XF = 4, SF = 13;
 
 localparam UADDR_WIDTH = 4'd10;
 localparam UROM_WIDTH = 5'd17;
-localparam UROM_DEPTH = 11'd1024;
+localparam UROM_DEPTH = 1024;
 
 localparam NADDR_WIDTH = 4'd9;
 localparam NANO_WIDTH = 68;
@@ -1500,7 +1500,7 @@ localparam REG_DT = 17;
 // synthesis translate_off 
 	`define SIMULBUGX32 1
 	wire [16:0] aulow = Dbl + auInpMux[15:0];
-	wire [31:0] auResult = {Dbh + auInpMux[31:16] + aulow[16], aulow[15:0]};
+	wire [31:0] auResult = {Dbh + auInpMux[31:16] + {15'd0,aulow[16]}, aulow[15:0]};
 // synthesis translate_on
 
 	always @( posedge Clks_clk) begin
@@ -2488,7 +2488,7 @@ endmodule
 //
 
 module uRom( input clk, input [UADDR_WIDTH-1:0] microAddr, output logic [UROM_WIDTH-1:0] microOutput);
-	reg [UROM_WIDTH-1:0] uRam[ UROM_DEPTH];		
+	reg [UROM_WIDTH-1:0] uRam[UROM_DEPTH];
 	initial begin
 		$readmemb("microrom.mem", uRam);
 	end
