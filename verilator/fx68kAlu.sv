@@ -458,19 +458,22 @@ module aluCorf( input [7:0] binResult, input bAdd, input cin, input hCarry,
 
 	reg [8:0] htemp;
 	reg [4:0] hNib;
+	reg		  highC;
 	
 	wire lowC  = hCarry | (bAdd ? gt9( binResult[ 3:0]) : 1'b0);
-	wire highC = cin	| (bAdd ? (gt9( htemp[7:4]) | htemp[8]) : 1'b0);
+	//wire highC = cin	| (bAdd ? (gt9( htemp[7:4]) | htemp[8]) : 1'b0);
 		
 	always @* begin
+		highC = 0;
 		if( bAdd) begin
 			htemp = { 1'b0, binResult} + (lowC  ? 9'h6 : 9'h0);
+			highC = cin	| (gt9( htemp[7:4]) | htemp[8]);
 			hNib  = htemp[8:4] + (highC ? 5'h6 : 5'h0);
 			ov = hNib[3] & ~binResult[7];
 		end
 		else begin
 			htemp = { 1'b0, binResult} - (lowC ? 9'h6 : 9'h0);
-			hNib  = htemp[8:4] - (highC ? 5'h6 : 5'h0);
+			hNib  = htemp[8:4] - (cin ? 5'h6 : 5'h0);
 			ov = ~hNib[3] & binResult[7];
 		end
 	end
