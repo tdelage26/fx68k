@@ -71,6 +71,9 @@ module fx68k(
 	input [15:0] iEdb, output [15:0] oEdb,
 	output [23:1] eab
 	);
+	// CPU registers
+	wire [31:0] PC, D0,D1,D2,D3,D4,D5,D6,D7, A0,A1,A2,A3,A4,A5,A6,A7;
+
 
 	// extReset: 		External sync reset on emulated system
 	// pwrUp:	 		Asserted together with reset on emulated system coldstart
@@ -304,7 +307,7 @@ module fx68k(
 		.Nanod_alue2Dbd, .Nanod_dbd2Alub, .Nanod_abd2Alub, .Nanod_alu2Dbd, .Nanod_alu2Abd, .Nanod_au2Db, .Nanod_au2Ab, .Nanod_au2Pc, .Nanod_dbin2Abd,
 		.Nanod_dbin2Dbd, .Nanod_extDbh, .Nanod_ablAbd, .Nanod_ablAbh, .Nanod_extAbh, .Nanod_dblDbd, .Nanod_dblDbh, .Nanod_abdIsByte, .Ird, .ftu, .iEdb, .pswS,
 		.prenEmpty, .au05z, .dcr4, .ze, .AblOut( Abl), .eab, .aob0, .Irc, .oEdb,
-		.alue, .ccr);
+		.alue, .ccr, .PC, .D0, .D1, .D2, .D3, .D4, .D5, .D6, .D7, .A0, .A1, .A2, .A3, .A4, .A5, .A6, .A7);
 
 	nDecoder3 nDecoder( .Clks_clk, .enT2, .enT4, .microLatch, .nanoLatch, .Irdecod_isPcRel, .Irdecod_isTas, .Nanod_permStart, .Nanod_waitBusFinish, .Nanod_isWrite,
 		.Nanod_busByte, .Nanod_isRmc, .Nanod_noLowByte, .Nanod_noHighByte, .Nanod_updTpend, .Nanod_clrTpend, .Nanod_tvn2Ftu, .Nanod_const2Ftu, .Nanod_ftu2Dbl, .Nanod_ftu2Abl,
@@ -1162,7 +1165,8 @@ module excUnit( input Clks_clk, input Clks_extReset,
 	output [15:0] AblOut,
 	output logic [15:0] Irc,
 	output logic [15:0] oEdb,
-	output logic [23:1] eab);
+	output logic [23:1] eab,
+	output logic [31:0]  PC, D0, D1, D2, D3, D4, D5, D6, D7, A0, A1, A2, A3, A4, A5, A6, A7);
 
 localparam REG_USP = 15;
 localparam REG_SSP = 16;
@@ -1171,6 +1175,22 @@ localparam REG_DT = 17;
 	// Register file
 	reg [15:0] regs68L[ 18];
 	reg [15:0] regs68H[ 18];
+	assign D0={regs68H[0],regs68L[0]};
+	assign D1={regs68H[1],regs68L[1]};
+	assign D2={regs68H[2],regs68L[2]};
+	assign D3={regs68H[3],regs68L[3]};
+	assign D4={regs68H[4],regs68L[4]};
+	assign D5={regs68H[5],regs68L[5]};
+	assign D6={regs68H[6],regs68L[6]};
+	assign D7={regs68H[7],regs68L[7]};
+	assign A0={regs68H[8],regs68L[8]};
+	assign A1={regs68H[9],regs68L[9]};
+	assign A2={regs68H[10],regs68L[10]};
+	assign A3={regs68H[11],regs68L[11]};
+	assign A4={regs68H[12],regs68L[12]};
+	assign A5={regs68H[13],regs68L[13]};
+	assign A6={regs68H[14],regs68L[14]};
+	assign A7={regs68H[15],regs68L[15]};
 
 // synthesis translate off
 	/*
@@ -1201,6 +1221,7 @@ localparam REG_DT = 17;
 	logic [15:0] dcrOutput;
 
 	reg [15:0] PcL, PcH;
+	assign PC={PcH,PcL};
 
 	reg [31:0] auReg, aob;
 
